@@ -1,4 +1,4 @@
-const CACHE = 'studyos-v3.1-fix1';
+const CACHE = 'studyos-v3.2-cssfix-fix1';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './manifest.json'];
 
 self.addEventListener('install', event => {

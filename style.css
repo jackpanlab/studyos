@@ -80,7 +80,30 @@ body{
  .orb-a,.orb-b{width:80vw;height:80vw}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
-\n/* StudyOS v2.1 — 編輯與復原 */\n.lesson{grid-template-columns:minmax(160px,1fr) 120px 110px 48px;align-items:center}\n.lesson-more{width:36px;height:36px;border:0;border-radius:50%;background:rgba(0,0,0,.045);cursor:pointer;font-size:20px;display:grid;place-items:center;transition:.25s}\n.lesson-more:hover{background:#111;color:#fff;transform:scale(1.05)}\n.lesson-sheet{position:fixed;inset:0;z-index:100;pointer-events:none;visibility:hidden}\n.lesson-sheet.open{pointer-events:auto;visibility:visible}\n.sheet-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.28);backdrop-filter:blur(10px);opacity:0;transition:.32s}\n.lesson-sheet.open .sheet-backdrop{opacity:1}\n.sheet-panel{position:absolute;left:50%;bottom:18px;width:min(620px,calc(100% - 28px));transform:translate(-50%,calc(100% + 40px));background:rgba(250,250,252,.96);backdrop-filter:blur(34px);border:1px solid rgba(255,255,255,.9);border-radius:32px;padding:16px 24px 24px;box-shadow:0 36px 120px rgba(0,0,0,.24);transition:.48s cubic-bezier(.2,.85,.2,1)}\n.lesson-sheet.open .sheet-panel{transform:translate(-50%,0)}\n.sheet-handle{width:44px;height:5px;background:#d2d2d7;border-radius:99px;margin:0 auto 18px}\n.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}\n.sheet-subject{color:var(--blue);font-size:14px;font-weight:650}\n.sheet-head h3{font-size:34px;letter-spacing:-.045em;margin:5px 0 20px}\n.sheet-close{width:38px;height:38px;border:0;border-radius:50%;background:#e9e9ec;font-size:25px;cursor:pointer}\n.sheet-field{display:grid;gap:8px;margin:16px 0}.sheet-field span{font-weight:650}\n.sheet-field input{width:100%;font-size:18px;padding:14px 15px;border-radius:15px;border:1px solid rgba(0,0,0,.09);background:white}\n.sheet-field small{color:var(--muted)}\n.sheet-actions{display:grid;gap:10px;margin-top:22px}.sheet-actions button{border:0;border-radius:999px;padding:14px 18px;font-weight:650;cursor:pointer}\n.primary-action{background:#111;color:white}.secondary-action{background:#e9e9ec;color:#111}.danger-action{background:#fff0f0;color:#b42318}\n.toast{display:flex;align-items:center;gap:12px;white-space:nowrap}.toast .undo-btn{border:0;border-left:1px solid rgba(255,255,255,.25);background:transparent;color:#6cb6ff;font-weight:700;padding-left:12px;cursor:pointer}\n@media(max-width:850px){.lesson{grid-template-columns:1fr 86px 42px}.lesson>span:nth-of-type(2){display:none}.sheet-panel{bottom:8px;border-radius:28px}}\n
+
+/* StudyOS v2.1 — 編輯與復原 */
+.lesson{grid-template-columns:minmax(160px,1fr) 120px 110px 48px;align-items:center}
+.lesson-more{width:36px;height:36px;border:0;border-radius:50%;background:rgba(0,0,0,.045);cursor:pointer;font-size:20px;display:grid;place-items:center;transition:.25s}
+.lesson-more:hover{background:#111;color:#fff;transform:scale(1.05)}
+.lesson-sheet{position:fixed;inset:0;z-index:100;pointer-events:none;visibility:hidden}
+.lesson-sheet.open{pointer-events:auto;visibility:visible}
+.sheet-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.28);backdrop-filter:blur(10px);opacity:0;transition:.32s}
+.lesson-sheet.open .sheet-backdrop{opacity:1}
+.sheet-panel{position:absolute;left:50%;bottom:18px;width:min(620px,calc(100% - 28px));transform:translate(-50%,calc(100% + 40px));background:rgba(250,250,252,.96);backdrop-filter:blur(34px);border:1px solid rgba(255,255,255,.9);border-radius:32px;padding:16px 24px 24px;box-shadow:0 36px 120px rgba(0,0,0,.24);transition:.48s cubic-bezier(.2,.85,.2,1)}
+.lesson-sheet.open .sheet-panel{transform:translate(-50%,0)}
+.sheet-handle{width:44px;height:5px;background:#d2d2d7;border-radius:99px;margin:0 auto 18px}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.sheet-subject{color:var(--blue);font-size:14px;font-weight:650}
+.sheet-head h3{font-size:34px;letter-spacing:-.045em;margin:5px 0 20px}
+.sheet-close{width:38px;height:38px;border:0;border-radius:50%;background:#e9e9ec;font-size:25px;cursor:pointer}
+.sheet-field{display:grid;gap:8px;margin:16px 0}.sheet-field span{font-weight:650}
+.sheet-field input{width:100%;font-size:18px;padding:14px 15px;border-radius:15px;border:1px solid rgba(0,0,0,.09);background:white}
+.sheet-field small{color:var(--muted)}
+.sheet-actions{display:grid;gap:10px;margin-top:22px}.sheet-actions button{border:0;border-radius:999px;padding:14px 18px;font-weight:650;cursor:pointer}
+.primary-action{background:#111;color:white}.secondary-action{background:#e9e9ec;color:#111}.danger-action{background:#fff0f0;color:#b42318}
+.toast{display:flex;align-items:center;gap:12px;white-space:nowrap}.toast .undo-btn{border:0;border-left:1px solid rgba(255,255,255,.25);background:transparent;color:#6cb6ff;font-weight:700;padding-left:12px;cursor:pointer}
+@media(max-width:850px){.lesson{grid-template-columns:1fr 86px 42px}.lesson>span:nth-of-type(2){display:none}.sheet-panel{bottom:8px;border-radius:28px}}
+
 
 /* StudyOS 3.0 */
 .brand sup{font-size:10px;color:#0071e3;margin-left:4px;vertical-align:top}
