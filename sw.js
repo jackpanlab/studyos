@@ -1,4 +1,4 @@
-const CACHE = 'studyos-v4.1-full-schedule';
+const CACHE = 'studyos-v4.2-live-reschedule';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './manifest.json'];
 
 self.addEventListener('install', event => {

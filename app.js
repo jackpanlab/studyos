@@ -390,7 +390,16 @@ function toast(t,undoFn=null){let e=$("#toast");e.innerHTML=`<span>${escapeHtml(
 $("#refreshAdvice").onclick=()=>{renderAdvice();toast("智慧建議已重新分析")};
 $("#prevMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()-1);renderCalendar()};$("#nextMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()+1);renderCalendar()};
 $("#saveNote").onclick=()=>{if(!state.selectedDate)return toast("請先選擇日期");state.notes[state.selectedDate]={text:$("#noteInput").value,capacity:+$("#capacityInput").value};save();plan=schedule();renderAll();toast("行事曆已儲存並重新排程")};
-$("#saveSettings").onclick=()=>{state.settings={...state.settings,startDate:$("#startDate").value,examDate:$("#examDate").value,weekdayCap:+$("#weekdayCap").value,saturdayCap:+$("#saturdayCap").value,sundayCap:+$("#sundayMode").value};save();plan=schedule();renderAll();toast("設定已更新")};
+$("#saveSettings").onclick=()=>{
+ const next={...state.settings,startDate:$("#startDate").value,examDate:$("#examDate").value,weekdayCap:Math.max(0,+$("#weekdayCap").value||0),saturdayCap:Math.max(0,+$("#saturdayCap").value||0),sundayCap:Math.max(0,+$("#sundayMode").value||0)};
+ if(!next.startDate||!next.examDate)return toast("請填寫開始日期與考試日期");
+ if(new Date(next.startDate)>new Date(next.examDate))return toast("開始日期不能晚於考試日期");
+ state.settings=next;
+ Object.keys(state.notes).forEach(k=>{if(state.notes[k]&&Object.prototype.hasOwnProperty.call(state.notes[k],"capacity"))delete state.notes[k].capacity});
+ save();plan=schedule();calDate=new Date(next.startDate+"T00:00:00");state.selectedDate=next.startDate;renderAll();renderCalendarDetail();
+ document.getElementById("calendar").scrollIntoView({behavior:"smooth"});
+ toast(`已重排：平日 ${next.weekdayCap} 分鐘、星期六 ${next.saturdayCap} 分鐘`);
+};
 $("#resetAll").onclick=()=>{if(confirm("確定重設所有進度與備註？")){localStorage.removeItem("studyos-state");location.reload()}};
 $$("[data-go]").forEach(b=>b.onclick=()=>document.getElementById(b.dataset.go).scrollIntoView({behavior:"smooth"}));
 const io=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting&&e.target.classList.add("visible")),{threshold:.12});$$(".reveal").forEach(e=>io.observe(e));
