@@ -92,22 +92,85 @@ function renderAdvice(){
 }
 
 function schedule(){
- const result={}; const start=new Date(state.settings.startDate+"T00:00:00"), end=new Date(state.settings.examDate+"T00:00:00");
- const pools={};
- [...new Set(COURSES.map(c=>c.subject))].forEach(s=>pools[s]=subjectCourses(s).filter(c=>!lessonDone(c.id)));
- let day=new Date(start), guard=0;
- while(day<=end && guard++<500){
-   const cap=dayCap(day)*60; const k=dateKey(day); result[k]=[]; let remaining=cap;
+ const result={};
+ const start=new Date(state.settings.startDate+"T00:00:00");
+ const end=new Date(state.settings.examDate+"T00:00:00");
+ const subjects=["材料力學","微積分","工程數學","靜力學","結構學"];
+ const subjectColors=Object.fromEntries(subjects.map(subject=>[subject,COURSES.find(c=>c.subject===subject)?.color||"#777"]));
+ const queues={};
+ subjects.forEach(subject=>{
+   queues[subject]=subjectCourses(subject)
+     .filter(c=>!lessonDone(c.id))
+     .map(c=>({course:c,remaining:Math.max(1,courseRemainingSeconds(c))}));
+ });
+ const virtualDone=new Set(COURSES.filter(c=>lessonDone(c.id)).map(c=>c.id));
+ const virtualRate=subject=>{
+   const all=COURSES.filter(c=>c.subject===subject && !state.hiddenCourses[c.id]);
+   return all.length?all.filter(c=>virtualDone.has(c.id)).length/all.length:0;
+ };
+ const projectedUnlock=subject=>{
+   if(subject==="工程數學")return virtualRate("微積分")>=1;
+   if(subject==="靜力學")return virtualRate("材料力學")>=.7;
+   if(subject==="結構學")return virtualRate("材料力學")>=1 && virtualRate("靜力學")>=.5;
+   return true;
+ };
+ const remainingLectures=()=>subjects.some(subject=>queues[subject].length);
+ let day=new Date(start),guard=0,subjectCursor=0,reviewCursor=0,reviewRound=1;
+ while(day<=end && guard++<600){
+   const k=dateKey(day);
+   const cap=Math.max(0,dayCap(day))*60;
+   result[k]=[];
+   let remaining=cap;
    if(cap<=0){day.setDate(day.getDate()+1);continue}
-   let candidates=["材料力學","微積分","工程數學","靜力學","結構學"].filter(subjectUnlock);
-   let cursor=0, safety=0;
-   while(remaining>900 && safety++<20){
-     let subj=candidates[cursor%candidates.length]; cursor++;
-     let item=pools[subj]?.[0]; if(!item){if(candidates.every(s=>!pools[s]?.length))break;continue}
-     let alloc=Math.min(item.seconds,remaining);
-     if(item.seconds>remaining && remaining<2700)continue;
-     result[k].push({...item,allocated:alloc});
-     remaining-=alloc; pools[subj].shift();
+   let safety=0;
+   while(remaining>=900 && remainingLectures() && safety++<100){
+     let unlocked=subjects.filter(subject=>projectedUnlock(subject) && queues[subject].length);
+     if(!unlocked.length){
+       unlocked=subjects.filter(subject=>queues[subject].length);
+       if(!unlocked.length)break;
+     }
+     let subject=unlocked[subjectCursor%unlocked.length];
+     subjectCursor++;
+     let entry=queues[subject][0];
+     if(!entry)continue;
+     if(entry.remaining>remaining && remaining<1800){
+       const fitting=unlocked.find(sub=>queues[sub][0] && queues[sub][0].remaining<=remaining);
+       if(fitting){subject=fitting;entry=queues[subject][0]}
+       else break;
+     }
+     const alloc=Math.min(entry.remaining,remaining);
+     result[k].push({
+       ...entry.course,
+       allocated:alloc,
+       scheduledSeconds:alloc,
+       isPartial:alloc<entry.remaining,
+       scheduleLabel:alloc<entry.remaining?`${entry.course.name}（分段）`:entry.course.name
+     });
+     entry.remaining-=alloc;
+     remaining-=alloc;
+     if(entry.remaining<=1){
+       virtualDone.add(entry.course.id);
+       queues[subject].shift();
+     }
+   }
+   while(remaining>=1800 && !remainingLectures()){
+     const subject=subjects[reviewCursor%subjects.length];
+     reviewCursor++;
+     const alloc=Math.min(3600,remaining);
+     result[k].push({
+       id:`review-${k}-${reviewCursor}`,
+       subject,
+       name:`第 ${reviewRound} 輪總複習`,
+       duration:secondsToClock(alloc),
+       seconds:alloc,
+       allocated:alloc,
+       scheduledSeconds:alloc,
+       color:subjectColors[subject],
+       order:10000+reviewCursor,
+       isReview:true
+     });
+     remaining-=alloc;
+     if(reviewCursor%subjects.length===0)reviewRound++;
    }
    day.setDate(day.getDate()+1);
  }
@@ -161,7 +224,7 @@ function renderCalendar(){
  for(let i=0;i<42;i++){
    let d=new Date(start);d.setDate(start.getDate()+i);
    let k=dateKey(d),note=state.notes[k],items=plan[k]||[];
-   const previews=items.slice(0,3).map(c=>`<div class="calendar-course-preview" style="--accent:${c.color}"><span>${escapeHtml(c.subject)}</span><b>${escapeHtml(c.name)}</b></div>`).join("");
+   const previews=items.slice(0,3).map(c=>`<div class="calendar-course-preview" style="--accent:${c.color}"><span>${escapeHtml(c.subject)}</span><b>${escapeHtml(c.scheduleLabel||c.name)}</b></div>`).join("");
    const more=items.length>3?`<div class="calendar-more">＋${items.length-3} 項</div>`:"";
    html+=`<div class="day ${d.getMonth()!=calDate.getMonth()?"dim":""} ${state.selectedDate==k?"selected":""}" data-date="${k}">
      <div class="day-number"><b>${d.getDate()}</b>${note?.text?'<span class="dot" title="有備註"></span>':""}</div>
@@ -195,11 +258,11 @@ function renderCalendarDetail(){
    ${note?`<div class="calendar-note-banner">備註：${escapeHtml(note)}</div>`:""}
    ${items.length?items.map((c,i)=>`<button class="calendar-course-row" type="button" data-calendar-edit="${c.id}">
       <span class="calendar-course-index">${pad(i+1)}</span>
-      <span class="calendar-course-main"><b>${escapeHtml(c.subject)}</b><strong>${escapeHtml(c.name)}</strong></span>
-      <span class="calendar-course-duration">${c.duration}</span>
+      <span class="calendar-course-main"><b>${escapeHtml(c.subject)}</b><strong>${escapeHtml(c.scheduleLabel||c.name)}</strong></span>
+      <span class="calendar-course-duration">${secondsToClock(c.allocated||c.seconds)}</span>
       <span class="calendar-course-state">${lessonDone(c.id)?"已完成":"未完成"}</span>
    </button>`).join(""):'<p class="empty-copy">這一天沒有安排課程。</p>'}`;
- $$("[data-calendar-edit]").forEach(btn=>btn.onclick=()=>openLessonSheet(btn.dataset.calendarEdit));
+ $$("[data-calendar-edit]").forEach(btn=>btn.onclick=()=>{if(!String(btn.dataset.calendarEdit).startsWith("review-"))openLessonSheet(btn.dataset.calendarEdit)});
 }
 function renderSubjects(){
  const subs=["材料力學","微積分","工程數學","靜力學","結構學"];
@@ -224,6 +287,7 @@ function renderSettings(){
 let activeCourseId=null;
 function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]))}
 function durationToSeconds(v){const p=String(v||"").trim().split(":").map(Number);if(p.length!==3||p.some(n=>!Number.isFinite(n)||n<0)||p[1]>59||p[2]>59)return 0;return p[0]*3600+p[1]*60+p[2]}
+function secondsToClock(v){v=Math.max(0,Math.round(v));return `${pad(Math.floor(v/3600))}:${pad(Math.floor((v%3600)/60))}:${pad(v%60)}`}
 function getCourse(id){return COURSES.find(c=>c.id===id)}
 function snapshotCourseState(id){return{edit:state.courseEdits[id]?{...state.courseEdits[id]}:null,progress:state.progress[id]?{...state.progress[id]}:null,hidden:!!state.hiddenCourses[id]}}
 function restoreCourseState(id,s){if(s.edit)state.courseEdits[id]={...s.edit};else delete state.courseEdits[id];if(s.progress)state.progress[id]={...s.progress};else delete state.progress[id];if(s.hidden)state.hiddenCourses[id]=true;else delete state.hiddenCourses[id];const c=getCourse(id),o=ORIGINAL_COURSES.find(x=>x.id===id);if(c&&o){c.name=s.edit?.name||o.name;c.duration=s.edit?.duration||o.duration;c.seconds=durationToSeconds(c.duration)}save();plan=schedule();renderAll()}
