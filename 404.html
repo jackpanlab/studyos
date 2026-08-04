@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f5f5f7">
-<title>StudyOS 4.2</title>
+<title>StudyOS 5.0</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="nav">
-  <div class="brand">StudyOS <sup>4.0</sup></div>
+  <div class="brand">StudyOS <sup>5.0</sup></div>
   <nav>
     <button data-go="today">Today</button>
     <button data-go="calendar">Calendar</button>
@@ -31,6 +31,43 @@
     <div><span>連續完成</span><strong id="streak">0 天</strong></div>
   </div>
   <div class="scroll-cue"><span>Scroll to explore</span><b>↓</b></div>
+</section>
+
+
+<section id="preview" class="section reveal">
+  <div class="section-head">
+    <span>Preview Queue</span>
+    <h2>今天做完了，<br>就先往前走一點。</h2>
+  </div>
+
+  <div class="preview-shell glass">
+    <div class="preview-status">
+      <div>
+        <span class="preview-kicker">額外預習，不更動正式排程</span>
+        <h3 id="previewStatusTitle">完成今日任務後可開始預習</h3>
+        <p id="previewStatusText">你可以從未來排程選擇課程，加入今天的額外預習清單。</p>
+      </div>
+      <strong id="previewTotal">0 分鐘</strong>
+    </div>
+
+    <div class="preview-columns">
+      <section>
+        <div class="preview-column-head">
+          <h4>未來可選課程</h4>
+          <span>依正式排程順序</span>
+        </div>
+        <div id="futurePreviewList" class="preview-list"></div>
+      </section>
+
+      <section>
+        <div class="preview-column-head">
+          <h4>今日預習清單</h4>
+          <button id="clearPreviewQueue" type="button">清空</button>
+        </div>
+        <div id="selectedPreviewList" class="preview-list"></div>
+      </section>
+    </div>
+  </div>
 </section>
 
 <section id="dashboard" class="section reveal">

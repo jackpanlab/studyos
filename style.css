@@ -191,3 +191,115 @@ body{
  .calendar-course-row{grid-template-columns:34px 1fr}
  .calendar-course-duration{display:none}
 }
+
+
+/* StudyOS 5.0 — Daily capacity truth + preview queue */
+.task-segment-note{
+  margin:10px 0 2px;
+  padding:9px 11px;
+  border-radius:12px;
+  background:rgba(0,113,227,.08);
+  color:#075b9c;
+  font-size:12px;
+  line-height:1.45;
+}
+
+.preview-shell{padding:28px;margin-top:38px}
+.preview-status{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:24px;
+  padding-bottom:22px;
+  border-bottom:1px solid var(--line);
+}
+.preview-status.ready{border-bottom-color:rgba(52,199,89,.35)}
+.preview-status>strong{
+  white-space:nowrap;
+  font-size:28px;
+  letter-spacing:-.04em;
+}
+.preview-kicker{
+  display:inline-block;
+  margin-bottom:8px;
+  color:var(--blue);
+  font-size:13px;
+  font-weight:750;
+}
+.preview-status h3{
+  margin:0 0 8px;
+  font-size:clamp(25px,3.5vw,42px);
+  letter-spacing:-.045em;
+}
+.preview-status p{margin:0;color:var(--muted);line-height:1.6}
+.preview-columns{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px;
+  margin-top:22px;
+}
+.preview-column-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:12px;
+}
+.preview-column-head h4{margin:0;font-size:18px}
+.preview-column-head span{color:var(--muted);font-size:12px}
+.preview-column-head button{
+  border:0;
+  background:transparent;
+  color:#d3342f;
+  cursor:pointer;
+}
+.preview-list{display:grid;gap:10px}
+.preview-course{
+  position:relative;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  min-height:92px;
+  padding:15px 16px 15px 20px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:rgba(255,255,255,.72);
+  overflow:hidden;
+}
+.preview-course::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:10px;
+  bottom:10px;
+  width:4px;
+  border-radius:8px;
+  background:var(--accent);
+}
+.preview-course span{font-size:12px;color:var(--muted)}
+.preview-course h5{margin:5px 0;font-size:16px}
+.preview-course p{margin:0;font-size:12px;color:var(--muted)}
+.preview-course button{
+  border:0;
+  border-radius:999px;
+  padding:9px 13px;
+  background:#111;
+  color:#fff;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.preview-course.selected{background:rgba(0,113,227,.035)}
+.preview-actions{display:flex;gap:7px}
+.preview-actions button:last-child{background:#ececec;color:#222}
+
+@media(max-width:850px){
+  .preview-columns{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .preview-shell{padding:18px}
+  .preview-status{flex-direction:column}
+  .preview-course{align-items:flex-start;flex-direction:column}
+  .preview-actions{width:100%}
+  .preview-actions button{flex:1}
+}

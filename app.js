@@ -6,6 +6,7 @@ state.settings={...defaults,...state.settings};
 state.courseEdits=state.courseEdits||{};
 state.hiddenCourses=state.hiddenCourses||{};
 state.lessonMeta=state.lessonMeta||{};
+state.previewQueue=Array.isArray(state.previewQueue)?state.previewQueue:[];
 const ORIGINAL_COURSES=COURSES.map(c=>({...c}));
 COURSES.forEach(course=>{const edit=state.courseEdits[course.id];if(edit){if(edit.name)course.name=edit.name;if(edit.duration){course.duration=edit.duration;course.seconds=durationToSeconds(edit.duration)}}});
 const save=()=>localStorage.setItem("studyos-state",JSON.stringify(state));
@@ -178,21 +179,141 @@ function schedule(){
 }
 let plan=schedule();
 function renderToday(){
- const now=new Date(); const today=dateKey(now); const tasks=plan[today]||[];
+ const now=new Date();
+ const today=dateKey(now);
+ const tasks=plan[today]||[];
  $("#todayLabel").textContent=now.toLocaleDateString("zh-TW",{year:"numeric",month:"long",day:"numeric",weekday:"long"});
- let exam=new Date(state.settings.examDate+"T00:00:00"); $("#daysLeft").textContent=Math.max(0,Math.ceil((exam-now)/86400000));
- $("#todayTasks").innerHTML=tasks.length?tasks.map(taskCard).join(""):`<article class="task" style="--accent:#888"><div class="pill">Today</div><h3>今天沒有排課</h3><p class="duration">休息，或提早完成明天的進度。</p></article>`;
- let remain=tasks.filter(t=>!lessonDone(t.id)).reduce((a,b)=>a+b.allocated,0); $("#todayRemaining").textContent=fmtSec(remain);
+ let exam=new Date(state.settings.examDate+"T00:00:00");
+ $("#daysLeft").textContent=Math.max(0,Math.ceil((exam-now)/86400000));
+
+ $("#todayTasks").innerHTML=tasks.length
+   ?tasks.map((task,index)=>taskCard(task,index,today)).join("")
+   :`<article class="task" style="--accent:#888"><div class="pill">Today</div><h3>今天沒有排課</h3><p class="duration">休息，或從下方選擇未來課程先預習。</p></article>`;
+
+ const planned=tasks.reduce((sum,t)=>sum+(t.allocated||0),0);
+ const unfinished=tasks.filter(t=>!lessonDone(t.id)).reduce((sum,t)=>sum+(t.allocated||0),0);
+ $("#todayRemaining").textContent=fmtSec(unfinished);
  $("#streak").textContent=calcStreak()+" 天";
+
+ const heroMeta=$("#todayRemaining")?.closest(".hero-meta");
+ if(heroMeta)heroMeta.dataset.planned=String(planned);
+
  bindChecks();
+ renderPreview();
 }
-function taskCard(c){
+
+function taskCard(c,index,todayKey){
  const p=state.progress[c.id]||{};
+ const allocated=c.allocated||c.seconds||0;
+ const full=c.seconds||allocated;
+ const partial=allocated+1<full;
+ const segmentText=partial?`今日安排 ${fmtSec(allocated)}｜整堂 ${c.duration}`:`今日安排 ${fmtSec(allocated)}`;
+ const label=c.scheduleLabel||c.name;
+
  return `<article class="task" style="--accent:${c.color}">
- <div class="task-top"><span class="pill">${c.subject}</span><span>${c.duration}</span></div>
- <h3>${c.name}</h3><div class="duration">精準片長 ${c.duration}</div>
- <div class="checks">${["video:影片","notes:教材","examples:例題","exercises:習題"].map(x=>{let [k,n]=x.split(":");return `<label class="check ${p[k]?"done":""}"><span>${n}</span><input type="checkbox" data-id="${c.id}" data-key="${k}" ${p[k]?"checked":""}><b>${p[k]?"✓":"○"}</b></label>`}).join("")}</div>
+   <div class="task-top">
+     <span class="pill">${escapeHtml(c.subject)}</span>
+     <span>${secondsToClock(allocated)}</span>
+   </div>
+   <h3>${escapeHtml(label)}</h3>
+   <div class="duration">${segmentText}</div>
+   ${partial?`<div class="task-segment-note">這只是今天的分段時數，不代表今天要看完整堂。</div>`:""}
+   <div class="checks">
+     ${["video:影片","notes:教材","examples:例題","exercises:習題"].map(x=>{
+       let [k,n]=x.split(":");
+       return `<label class="check ${p[k]?"done":""}">
+         <span>${n}</span>
+         <input type="checkbox" data-id="${c.id}" data-key="${k}" ${p[k]?"checked":""}>
+         <b>${p[k]?"✓":"○"}</b>
+       </label>`;
+     }).join("")}
+   </div>
  </article>`;
+}
+
+function todayFormalDone(){
+ const tasks=plan[dateKey(new Date())]||[];
+ return tasks.length===0||tasks.every(t=>lessonDone(t.id));
+}
+
+function futurePreviewCandidates(limit=12){
+ const today=new Date();
+ const seen=new Set(state.previewQueue);
+ const result=[];
+ for(let offset=1;offset<=90&&result.length<limit;offset++){
+   const d=new Date(today);
+   d.setDate(today.getDate()+offset);
+   const key=dateKey(d);
+   for(const item of plan[key]||[]){
+     if(item.isReview||lessonDone(item.id)||seen.has(item.id)||result.some(x=>x.id===item.id))continue;
+     result.push({...item,scheduledDate:key});
+     if(result.length>=limit)break;
+   }
+ }
+ return result;
+}
+
+function previewCourseMinutes(c){
+ const meta=state.lessonMeta[c.id]||{};
+ const watched=durationToSeconds(meta.watchPosition||"00:00:00");
+ const rate=Math.max(1,+meta.playbackRate||1.5);
+ const remaining=Math.max(0,(c.seconds-watched)/rate);
+ return Math.max(15*60,Math.min(60*60,remaining||30*60));
+}
+
+function renderPreview(){
+ const queue=state.previewQueue.map(getCourse).filter(Boolean);
+ state.previewQueue=queue.map(c=>c.id);
+
+ const completed=todayFormalDone();
+ $("#previewStatusTitle").textContent=completed?"今日正式進度已完成，可以開始預習":"先完成今日正式進度，再進行預習";
+ $("#previewStatusText").textContent=completed
+   ?"預習是額外進度，不會改動正式日曆；可直接選擇下方未來課程。"
+   :"你仍可先建立預習清單，完成今日任務後再開始。";
+ $("#previewStatusTitle").closest(".preview-status")?.classList.toggle("ready",completed);
+
+ const candidates=futurePreviewCandidates();
+ $("#futurePreviewList").innerHTML=candidates.length?candidates.map(c=>`
+   <article class="preview-course" style="--accent:${c.color}">
+     <div>
+       <span>${escapeHtml(c.subject)}｜${c.scheduledDate}</span>
+       <h5>${escapeHtml(c.name)}</h5>
+       <p>正式排程：${fmtSec(c.allocated||c.seconds)}</p>
+     </div>
+     <button type="button" data-add-preview="${c.id}">加入預習</button>
+   </article>`).join(""):`<p class="empty-copy">目前沒有可選的未來課程。</p>`;
+
+ $("#selectedPreviewList").innerHTML=queue.length?queue.map(c=>{
+   const minutes=previewCourseMinutes(c);
+   const meta=state.lessonMeta[c.id]||{};
+   return `<article class="preview-course selected" style="--accent:${c.color}">
+     <div>
+       <span>${escapeHtml(c.subject)}${meta.favorite?" ⭐":""}</span>
+       <h5>${escapeHtml(c.name)}</h5>
+       <p>建議先預習 ${fmtSec(minutes)}</p>
+     </div>
+     <div class="preview-actions">
+       <button type="button" data-open-preview="${c.id}">開啟</button>
+       <button type="button" data-remove-preview="${c.id}">移除</button>
+     </div>
+   </article>`;
+ }).join(""):`<p class="empty-copy">尚未選擇預習課程。</p>`;
+
+ const total=queue.reduce((sum,c)=>sum+previewCourseMinutes(c),0);
+ $("#previewTotal").textContent=fmtSec(total);
+
+ $$("[data-add-preview]").forEach(btn=>btn.onclick=()=>{
+   const id=btn.dataset.addPreview;
+   if(!state.previewQueue.includes(id))state.previewQueue.push(id);
+   save();renderPreview();toast("已加入今日預習清單");
+ });
+
+ $$("[data-remove-preview]").forEach(btn=>btn.onclick=()=>{
+   state.previewQueue=state.previewQueue.filter(id=>id!==btn.dataset.removePreview);
+   save();renderPreview();toast("已移除預習課程");
+ });
+
+ $$("[data-open-preview]").forEach(btn=>btn.onclick=()=>openLessonSheet(btn.dataset.openPreview));
 }
 function bindChecks(){
  $$(".check input").forEach(i=>i.onchange=()=>{
@@ -361,7 +482,7 @@ $("#restoreHidden").onclick=()=>{
 };
 
 $("#exportData").onclick=()=>{
- const payload={version:"3.0",exportedAt:new Date().toISOString(),state};
+ const payload={version:"5.0",exportedAt:new Date().toISOString(),state};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
  const a=document.createElement("a");
  a.href=URL.createObjectURL(blob);
@@ -384,9 +505,15 @@ $("#importData").onchange=async e=>{
  e.target.value="";
 };
 
-function renderAll(){renderToday();renderDashboard();renderAdvice();renderCalendar();renderSubjects();renderSettings()}
+function renderAll(){renderToday();renderDashboard();renderAdvice();renderCalendar();renderSubjects();renderSettings();renderPreview()}
 let undoTimer=null;
 function toast(t,undoFn=null){let e=$("#toast");e.innerHTML=`<span>${escapeHtml(t)}</span>${undoFn?'<button class="undo-btn" type="button">復原</button>':''}`;e.classList.add("show");clearTimeout(undoTimer);if(undoFn)e.querySelector(".undo-btn").onclick=()=>{undoFn();e.classList.remove("show");toast("已復原")};undoTimer=setTimeout(()=>e.classList.remove("show"),undoFn?8000:2200)}
+$("#clearPreviewQueue").onclick=()=>{
+ state.previewQueue=[];
+ save();
+ renderPreview();
+ toast("已清空今日預習清單");
+};
 $("#refreshAdvice").onclick=()=>{renderAdvice();toast("智慧建議已重新分析")};
 $("#prevMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()-1);renderCalendar()};$("#nextMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()+1);renderCalendar()};
 $("#saveNote").onclick=()=>{if(!state.selectedDate)return toast("請先選擇日期");state.notes[state.selectedDate]={text:$("#noteInput").value,capacity:+$("#capacityInput").value};save();plan=schedule();renderAll();toast("行事曆已儲存並重新排程")};
