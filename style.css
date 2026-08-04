@@ -133,3 +133,61 @@ body{
 @media(max-width:700px){
  .sheet-two,.settings-actions{grid-template-columns:1fr}
 }
+
+
+/* StudyOS 4.0 — Smart Advisor + Calendar Detail */
+.advisor-shell{padding:28px;margin-top:40px}
+.advisor-intro{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:24px}
+.advisor-kicker{display:inline-block;color:var(--blue);font-weight:700;margin-bottom:8px}
+.advisor-intro h3{font-size:clamp(28px,4vw,48px);letter-spacing:-.045em;margin:0 0 10px}
+.advisor-intro p{max-width:720px;color:var(--muted);line-height:1.65;margin:0}
+.advisor-refresh{border:0;border-radius:999px;padding:12px 18px;background:#111;color:#fff;cursor:pointer;white-space:nowrap}
+.advisor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.advisor-card{position:relative;overflow:hidden;border-radius:24px;padding:22px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9);min-height:280px;display:flex;flex-direction:column}
+.advisor-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+.advisor-rank{font-size:54px;font-weight:750;color:rgba(0,0,0,.07);line-height:1}
+.advisor-card-top{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:13px;margin-top:10px}
+.advisor-card-top b{color:var(--blue)}
+.advisor-card h4{font-size:25px;letter-spacing:-.035em;margin:16px 0 10px}
+.advisor-card p{color:var(--muted);line-height:1.55;margin:0 0 20px}
+.advisor-card-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:auto;font-size:13px}
+.advisor-card-foot button{border:0;border-radius:999px;background:#111;color:#fff;padding:9px 13px;cursor:pointer}
+.calendar-grid{align-items:stretch}
+.day{min-height:145px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.day-number{display:flex;justify-content:space-between;align-items:center}
+.calendar-previews{display:grid;gap:5px;min-width:0}
+.calendar-course-preview{position:relative;display:grid;grid-template-columns:58px 1fr;gap:6px;align-items:center;padding:6px 7px 6px 10px;border-radius:9px;background:rgba(0,0,0,.035);font-size:10px;min-width:0}
+.calendar-course-preview::before{content:"";position:absolute;left:0;top:3px;bottom:3px;width:3px;border-radius:10px;background:var(--accent)}
+.calendar-course-preview span{color:var(--muted);white-space:nowrap}
+.calendar-course-preview b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.calendar-more{font-size:10px;color:var(--muted);padding-left:4px}
+.calendar-detail{margin-top:20px;padding:24px}
+.calendar-detail-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:18px}
+.calendar-detail-head span{color:var(--blue);font-size:13px;font-weight:700}
+.calendar-detail-head h3{font-size:27px;margin:5px 0 0;letter-spacing:-.035em}
+.calendar-detail-head>strong{font-size:23px}
+.calendar-course-list{display:grid;gap:8px}
+.calendar-course-row{display:grid;grid-template-columns:50px 1fr 100px 80px;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--line);border-radius:16px;padding:14px;background:rgba(255,255,255,.7);cursor:pointer;transition:.2s}
+.calendar-course-row:hover{transform:translateY(-2px);background:#fff;box-shadow:0 12px 28px rgba(0,0,0,.06)}
+.calendar-course-index{font-size:22px;color:#bbb;font-weight:700}
+.calendar-course-main{display:grid;gap:3px}.calendar-course-main b{font-size:12px;color:var(--blue)}.calendar-course-main strong{font-size:16px}
+.calendar-course-duration,.calendar-course-state{color:var(--muted);font-size:13px;text-align:right}
+.calendar-note-banner{padding:13px 15px;border-radius:14px;background:rgba(255,149,0,.1);color:#8a4b00;margin-bottom:5px}
+.empty-copy{color:var(--muted);margin:8px 0}
+@media(max-width:950px){
+ .advisor-grid{grid-template-columns:1fr}
+ .advisor-card{min-height:220px}
+ .day{min-height:100px}
+ .calendar-course-preview{display:none}
+ .calendar-more{display:block}
+ .calendar-course-row{grid-template-columns:42px 1fr 75px}
+ .calendar-course-state{display:none}
+}
+@media(max-width:650px){
+ .advisor-intro{flex-direction:column}
+ .weekdays,.calendar-grid{gap:4px}
+ .day{min-height:72px;border-radius:13px;padding:8px}
+ .calendar-detail-head{align-items:flex-start;flex-direction:column}
+ .calendar-course-row{grid-template-columns:34px 1fr}
+ .calendar-course-duration{display:none}
+}

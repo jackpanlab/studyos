@@ -22,6 +22,75 @@ const subjectUnlock=subj=>{
 const lessonDone=id=>{let p=state.progress[id]||{};return ["video","notes","examples","exercises"].every(k=>p[k])};
 const subjectCourses=s=>COURSES.filter(c=>c.subject===s && !state.hiddenCourses[c.id]);
 const subjectRate=s=>{let a=subjectCourses(s);return a.length?a.filter(c=>lessonDone(c.id)).length/a.length:0};
+const subjectPriority={"材料力學":24,"微積分":22,"工程數學":20,"靜力學":18,"結構學":16};
+const subjectDependencyReason={
+ "材料力學":"後續靜力學與結構學的重要基礎",
+ "微積分":"工程數學的前置基礎",
+ "工程數學":"研究所考試的重要計算科目",
+ "靜力學":"結構學的直接前置科目",
+ "結構學":"結構組核心專業科目"
+};
+function courseRemainingSeconds(c){
+ const meta=state.lessonMeta[c.id]||{};
+ const watched=durationToSeconds(meta.watchPosition||"00:00:00");
+ const rate=Math.max(1,+meta.playbackRate||1.5);
+ return Math.max(0,(c.seconds-watched)/rate);
+}
+function dueForReview(c){
+ const updated=state.progress[c.id]?.updated;
+ if(!lessonDone(c.id)||!updated)return false;
+ const days=(Date.now()-new Date(updated).getTime())/86400000;
+ return days>=5;
+}
+function buildAdvice(){
+ const todayKey=dateKey(new Date());
+ const formalIds=new Set((plan[todayKey]||[]).map(x=>x.id));
+ const candidates=COURSES.filter(c=>!state.hiddenCourses[c.id] && (!lessonDone(c.id)||dueForReview(c)));
+ const scored=candidates.map(c=>{
+   const meta=state.lessonMeta[c.id]||{};
+   const rate=subjectRate(c.subject);
+   let score=(1-rate)*70+(subjectPriority[c.subject]||10);
+   const reasons=[];
+   if(meta.pinned){score+=100;reasons.push("你已標記為今日必看")}
+   if(meta.favorite){score+=20;reasons.push("你已加入重點")}
+   if(formalIds.has(c.id)){score+=35;reasons.push("本來就在今日正式排程")}
+   if(dueForReview(c)){score+=48;reasons.push("距離上次完成已超過 5 天，適合短複習")}
+   if(!lessonDone(c.id)){
+     reasons.push(`${c.subject}目前完成 ${Math.round(rate*100)}%`);
+     reasons.push(subjectDependencyReason[c.subject]||"目前值得優先完成");
+   }
+   const remain=courseRemainingSeconds(c);
+   if(remain<=5400){score+=12;reasons.push(`以目前倍速約需 ${fmtSec(remain)}`)}
+   return {course:c,score,reasons,remain,review:dueForReview(c)};
+ }).sort((a,b)=>b.score-a.score);
+ const picked=[];const used=new Set();
+ for(const item of scored){
+   if(picked.length>=3)break;
+   if(used.has(item.course.subject) && picked.length<2)continue;
+   picked.push(item);used.add(item.course.subject);
+ }
+ return picked;
+}
+function renderAdvice(){
+ const items=buildAdvice();
+ $("#aiSuggestions").innerHTML=items.length?items.map((x,i)=>`
+   <article class="advisor-card" style="--accent:${x.course.color}">
+     <div class="advisor-rank">0${i+1}</div>
+     <div class="advisor-card-top"><span>${escapeHtml(x.course.subject)}</span><b>${x.review?"複習建議":"優先建議"}</b></div>
+     <h4>${escapeHtml(x.course.name)}</h4>
+     <p>${x.reasons.slice(0,3).map(escapeHtml).join("；")}。</p>
+     <div class="advisor-card-foot">
+       <span>${x.review?"建議複習 20–30 分鐘":`剩餘約 ${fmtSec(x.remain)}`}</span>
+       <button type="button" data-apply-advice="${x.course.id}">${state.lessonMeta[x.course.id]?.pinned?"已設為今日必看":"設為今日必看"}</button>
+     </div>
+   </article>`).join(""):`<p class="empty-copy">目前沒有額外建議，照既定排程完成即可。</p>`;
+ $$("[data-apply-advice]").forEach(btn=>btn.onclick=()=>{
+   const id=btn.dataset.applyAdvice;
+   state.lessonMeta[id]={...(state.lessonMeta[id]||{}),pinned:true};
+   save();renderAdvice();renderSubjects();toast("已設為今日必看");
+ });
+}
+
 function schedule(){
  const result={}; const start=new Date(state.settings.startDate+"T00:00:00"), end=new Date(state.settings.examDate+"T00:00:00");
  const pools={};
@@ -89,9 +158,48 @@ function renderCalendar(){
  $("#monthLabel").textContent=calDate.toLocaleDateString("zh-TW",{year:"numeric",month:"long"});
  let first=new Date(calDate.getFullYear(),calDate.getMonth(),1), start=new Date(first);start.setDate(1-first.getDay());
  let html="";
- for(let i=0;i<42;i++){let d=new Date(start);d.setDate(start.getDate()+i);let k=dateKey(d),note=state.notes[k];html+=`<div class="day ${d.getMonth()!=calDate.getMonth()?"dim":""} ${state.selectedDate==k?"selected":""}" data-date="${k}"><b>${d.getDate()}</b><div>${(plan[k]||[]).length?`${(plan[k]||[]).length} 項課程`:""}</div>${note?.text?'<span class="dot"></span>':""}</div>`}
+ for(let i=0;i<42;i++){
+   let d=new Date(start);d.setDate(start.getDate()+i);
+   let k=dateKey(d),note=state.notes[k],items=plan[k]||[];
+   const previews=items.slice(0,3).map(c=>`<div class="calendar-course-preview" style="--accent:${c.color}"><span>${escapeHtml(c.subject)}</span><b>${escapeHtml(c.name)}</b></div>`).join("");
+   const more=items.length>3?`<div class="calendar-more">＋${items.length-3} 項</div>`:"";
+   html+=`<div class="day ${d.getMonth()!=calDate.getMonth()?"dim":""} ${state.selectedDate==k?"selected":""}" data-date="${k}">
+     <div class="day-number"><b>${d.getDate()}</b>${note?.text?'<span class="dot" title="有備註"></span>':""}</div>
+     <div class="calendar-previews">${previews}${more}</div>
+   </div>`;
+ }
  $("#calendarGrid").innerHTML=html;
- $$(".day").forEach(el=>el.onclick=()=>{state.selectedDate=el.dataset.date;let n=state.notes[state.selectedDate]||{};$("#noteDate").textContent=state.selectedDate;$("#noteInput").value=n.text||"";$("#capacityInput").value=n.capacity??dayCap(new Date(state.selectedDate+"T00:00:00"))/60;renderCalendar()});
+ $$(".day").forEach(el=>el.onclick=()=>{
+   state.selectedDate=el.dataset.date;
+   let n=state.notes[state.selectedDate]||{};
+   $("#noteDate").textContent=state.selectedDate;
+   $("#noteInput").value=n.text||"";
+   $("#capacityInput").value=n.capacity??dayCap(new Date(state.selectedDate+"T00:00:00"))/60;
+   renderCalendar();
+   renderCalendarDetail();
+ });
+ if(state.selectedDate)renderCalendarDetail();
+}
+function renderCalendarDetail(){
+ const key=state.selectedDate;
+ if(!key){
+   $("#calendarDetailDate").textContent="請選擇日期";
+   $("#calendarDetailTotal").textContent="0 分鐘";
+   $("#calendarCourseList").innerHTML='<p class="empty-copy">點選上方日期，即可查看完整課表。</p>';
+   return;
+ }
+ const d=new Date(key+"T00:00:00"),items=plan[key]||[],note=state.notes[key]?.text;
+ $("#calendarDetailDate").textContent=d.toLocaleDateString("zh-TW",{year:"numeric",month:"long",day:"numeric",weekday:"long"});
+ $("#calendarDetailTotal").textContent=fmtSec(items.reduce((a,c)=>a+c.allocated,0));
+ $("#calendarCourseList").innerHTML=`
+   ${note?`<div class="calendar-note-banner">備註：${escapeHtml(note)}</div>`:""}
+   ${items.length?items.map((c,i)=>`<button class="calendar-course-row" type="button" data-calendar-edit="${c.id}">
+      <span class="calendar-course-index">${pad(i+1)}</span>
+      <span class="calendar-course-main"><b>${escapeHtml(c.subject)}</b><strong>${escapeHtml(c.name)}</strong></span>
+      <span class="calendar-course-duration">${c.duration}</span>
+      <span class="calendar-course-state">${lessonDone(c.id)?"已完成":"未完成"}</span>
+   </button>`).join(""):'<p class="empty-copy">這一天沒有安排課程。</p>'}`;
+ $$("[data-calendar-edit]").forEach(btn=>btn.onclick=()=>openLessonSheet(btn.dataset.calendarEdit));
 }
 function renderSubjects(){
  const subs=["材料力學","微積分","工程數學","靜力學","結構學"];
@@ -212,9 +320,10 @@ $("#importData").onchange=async e=>{
  e.target.value="";
 };
 
-function renderAll(){renderToday();renderDashboard();renderCalendar();renderSubjects();renderSettings()}
+function renderAll(){renderToday();renderDashboard();renderAdvice();renderCalendar();renderSubjects();renderSettings()}
 let undoTimer=null;
 function toast(t,undoFn=null){let e=$("#toast");e.innerHTML=`<span>${escapeHtml(t)}</span>${undoFn?'<button class="undo-btn" type="button">復原</button>':''}`;e.classList.add("show");clearTimeout(undoTimer);if(undoFn)e.querySelector(".undo-btn").onclick=()=>{undoFn();e.classList.remove("show");toast("已復原")};undoTimer=setTimeout(()=>e.classList.remove("show"),undoFn?8000:2200)}
+$("#refreshAdvice").onclick=()=>{renderAdvice();toast("智慧建議已重新分析")};
 $("#prevMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()-1);renderCalendar()};$("#nextMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()+1);renderCalendar()};
 $("#saveNote").onclick=()=>{if(!state.selectedDate)return toast("請先選擇日期");state.notes[state.selectedDate]={text:$("#noteInput").value,capacity:+$("#capacityInput").value};save();plan=schedule();renderAll();toast("行事曆已儲存並重新排程")};
 $("#saveSettings").onclick=()=>{state.settings={...state.settings,startDate:$("#startDate").value,examDate:$("#examDate").value,weekdayCap:+$("#weekdayCap").value,saturdayCap:+$("#saturdayCap").value,sundayCap:+$("#sundayMode").value};save();plan=schedule();renderAll();toast("設定已更新")};
