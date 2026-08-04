@@ -1,8 +1,13 @@
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const defaults={startDate:"2026-08-01",examDate:"2027-02-04",weekdayCap:180,saturdayCap:360,sundayCap:0};
-let state=JSON.parse(localStorage.getItem("studyos-state")||"null")||{settings:defaults,progress:{},notes:{},selectedDate:null};
+let state=JSON.parse(localStorage.getItem("studyos-state")||"null")||{settings:defaults,progress:{},notes:{},selectedDate:null,courseEdits:{},hiddenCourses:{}};
 state.settings={...defaults,...state.settings};
+state.courseEdits=state.courseEdits||{};
+state.hiddenCourses=state.hiddenCourses||{};
+state.lessonMeta=state.lessonMeta||{};
+const ORIGINAL_COURSES=COURSES.map(c=>({...c}));
+COURSES.forEach(course=>{const edit=state.courseEdits[course.id];if(edit){if(edit.name)course.name=edit.name;if(edit.duration){course.duration=edit.duration;course.seconds=durationToSeconds(edit.duration)}}});
 const save=()=>localStorage.setItem("studyos-state",JSON.stringify(state));
 const pad=n=>String(n).padStart(2,"0");
 const fmtSec=s=>{s=Math.max(0,Math.round(s));let h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?`${h} 小時 ${m} 分`:`${m} 分鐘`};
@@ -15,7 +20,7 @@ const subjectUnlock=subj=>{
  return true;
 };
 const lessonDone=id=>{let p=state.progress[id]||{};return ["video","notes","examples","exercises"].every(k=>p[k])};
-const subjectCourses=s=>COURSES.filter(c=>c.subject===s);
+const subjectCourses=s=>COURSES.filter(c=>c.subject===s && !state.hiddenCourses[c.id]);
 const subjectRate=s=>{let a=subjectCourses(s);return a.length?a.filter(c=>lessonDone(c.id)).length/a.length:0};
 function schedule(){
  const result={}; const start=new Date(state.settings.startDate+"T00:00:00"), end=new Date(state.settings.examDate+"T00:00:00");
@@ -90,14 +95,126 @@ function renderCalendar(){
 }
 function renderSubjects(){
  const subs=["材料力學","微積分","工程數學","靜力學","結構學"];
- $("#subjectAccordion").innerHTML=subs.map(s=>`<div class="subject-card"><div class="subject-head"><div><b>${s}</b><div>${Math.round(subjectRate(s)*100)}% 完成</div></div><span>${subjectUnlock(s)?"⌄":"🔒"}</span></div><div class="subject-lessons">${subjectCourses(s).map(c=>`<div class="lesson ${lessonDone(c.id)?"done":""}"><b>${c.name}</b><span>${c.duration}</span><span>${lessonDone(c.id)?"已完成":"未完成"}</span></div>`).join("")}</div></div>`).join("");
+ $("#subjectAccordion").innerHTML=subs.map(s=>`<div class="subject-card"><div class="subject-head"><div><b>${s}</b><div>${Math.round(subjectRate(s)*100)}% 完成</div></div><span>${subjectUnlock(s)?"⌄":"🔒"}</span></div><div class="subject-lessons">${subjectCourses(s).map(c=>{
+   const meta=state.lessonMeta[c.id]||{};
+   const badges=[meta.favorite?"⭐":"",meta.pinned?"📌":"",meta.watchPosition&&meta.watchPosition!=="00:00:00"?`看到 ${meta.watchPosition}`:""].filter(Boolean);
+   return `<div class="lesson ${lessonDone(c.id)?"done":""}" data-course-id="${c.id}">
+     <b>${escapeHtml(c.name)}${meta.note?`<small class="lesson-note-preview">${escapeHtml(meta.note.slice(0,36))}${meta.note.length>36?"…":""}</small>`:""}</b>
+     <span>${c.duration}</span>
+     <span class="lesson-meta">${lessonDone(c.id)?"已完成":"未完成"}${badges.map(x=>`<i class="lesson-badge">${escapeHtml(x)}</i>`).join("")}</span>
+     <button class="lesson-more" type="button" data-edit-course="${c.id}" aria-label="編輯 ${escapeHtml(c.name)}">⋯</button>
+   </div>`;
+ }).join("")}</div></div>`).join("");
  $$(".subject-card").forEach(card=>card.querySelector(".subject-head").onclick=()=>card.classList.toggle("open"));
+ $$('[data-edit-course]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openLessonSheet(btn.dataset.editCourse)});
 }
+
 function renderSettings(){
  $("#startDate").value=state.settings.startDate;$("#examDate").value=state.settings.examDate;$("#weekdayCap").value=state.settings.weekdayCap;$("#saturdayCap").value=state.settings.saturdayCap;$("#sundayMode").value=state.settings.sundayCap;
 }
+
+let activeCourseId=null;
+function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]))}
+function durationToSeconds(v){const p=String(v||"").trim().split(":").map(Number);if(p.length!==3||p.some(n=>!Number.isFinite(n)||n<0)||p[1]>59||p[2]>59)return 0;return p[0]*3600+p[1]*60+p[2]}
+function getCourse(id){return COURSES.find(c=>c.id===id)}
+function snapshotCourseState(id){return{edit:state.courseEdits[id]?{...state.courseEdits[id]}:null,progress:state.progress[id]?{...state.progress[id]}:null,hidden:!!state.hiddenCourses[id]}}
+function restoreCourseState(id,s){if(s.edit)state.courseEdits[id]={...s.edit};else delete state.courseEdits[id];if(s.progress)state.progress[id]={...s.progress};else delete state.progress[id];if(s.hidden)state.hiddenCourses[id]=true;else delete state.hiddenCourses[id];const c=getCourse(id),o=ORIGINAL_COURSES.find(x=>x.id===id);if(c&&o){c.name=s.edit?.name||o.name;c.duration=s.edit?.duration||o.duration;c.seconds=durationToSeconds(c.duration)}save();plan=schedule();renderAll()}
+function openLessonSheet(id){
+ const c=getCourse(id);if(!c)return;
+ const meta=state.lessonMeta[id]||{};
+ activeCourseId=id;
+ $("#sheetSubject").textContent=c.subject;
+ $("#sheetTitle").textContent=c.name;
+ $("#editLessonName").value=c.name;
+ $("#editLessonDuration").value=c.duration;
+ $("#editWatchPosition").value=meta.watchPosition||"00:00:00";
+ $("#editPlaybackRate").value=String(meta.playbackRate||1.5);
+ $("#editLessonNote").value=meta.note||"";
+ $("#editFavorite").checked=!!meta.favorite;
+ $("#editPinned").checked=!!meta.pinned;
+ $("#toggleLessonStatus").textContent=lessonDone(id)?"改回未完成":"標記完成";
+ $("#lessonSheet").classList.add("open");
+ $("#lessonSheet").setAttribute("aria-hidden","false");
+}
+function closeLessonSheet(){$("#lessonSheet").classList.remove("open");$("#lessonSheet").setAttribute("aria-hidden","true");activeCourseId=null}
+function completeAllParts(id,done){state.progress[id]={...(state.progress[id]||{}),video:done,notes:done,examples:done,exercises:done,updated:new Date().toISOString()};save();plan=schedule();renderAll()}
+$$('[data-close-sheet]').forEach(el=>el.onclick=closeLessonSheet);document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLessonSheet()});
+$("#saveLessonEdit").onclick=()=>{
+ if(!activeCourseId)return;
+ const c=getCourse(activeCourseId),id=activeCourseId;
+ const name=$("#editLessonName").value.trim();
+ const duration=$("#editLessonDuration").value.trim();
+ const watchPosition=$("#editWatchPosition").value.trim()||"00:00:00";
+ const seconds=durationToSeconds(duration),watched=durationToSeconds(watchPosition);
+ if(!name)return toast("課程名稱不能空白");
+ if(!seconds)return toast("片長格式錯誤，請輸入 HH:MM:SS");
+ if(watched>seconds)return toast("目前觀看位置不能超過片長");
+ const snap=snapshotCourseState(id);
+ const oldMeta=state.lessonMeta[id]?{...state.lessonMeta[id]}:null;
+ state.courseEdits[id]={name,duration};
+ state.lessonMeta[id]={
+   ...(state.lessonMeta[id]||{}),
+   watchPosition,
+   playbackRate:+$("#editPlaybackRate").value,
+   note:$("#editLessonNote").value.trim(),
+   favorite:$("#editFavorite").checked,
+   pinned:$("#editPinned").checked
+ };
+ c.name=name;c.duration=duration;c.seconds=seconds;
+ save();plan=schedule();closeLessonSheet();renderAll();
+ toast(`已儲存 ${name}`,()=>{
+   restoreCourseState(id,snap);
+   if(oldMeta)state.lessonMeta[id]=oldMeta;else delete state.lessonMeta[id];
+   save();renderAll();
+ });
+};
+$("#toggleLessonStatus").onclick=()=>{if(!activeCourseId)return;const id=activeCourseId,c=getCourse(id),was=lessonDone(id),snap=snapshotCourseState(id);completeAllParts(id,!was);closeLessonSheet();toast(was?`已將 ${c.name} 改回未完成`:`已完成 ${c.name}`,()=>restoreCourseState(id,snap))};
+$("#hideLesson").onclick=()=>{if(!activeCourseId)return;const id=activeCourseId,c=getCourse(id),snap=snapshotCourseState(id);if(!confirm(`確定隱藏「${c.name}」？可在 8 秒內復原。`))return;state.hiddenCourses[id]=true;save();plan=schedule();closeLessonSheet();renderAll();toast(`已隱藏 ${c.name}`,()=>restoreCourseState(id,snap))};
+
+
+$("#restoreHidden").onclick=()=>{
+ const hidden=ORIGINAL_COURSES.filter(c=>state.hiddenCourses[c.id]);
+ if(!hidden.length)return toast("目前沒有已隱藏課程");
+ const list=hidden.map((c,i)=>`${i+1}. ${c.subject}｜${c.name}`).join("\n");
+ const n=prompt(`輸入要恢復的編號；輸入 ALL 恢復全部：\n\n${list}`);
+ if(!n)return;
+ if(n.trim().toUpperCase()==="ALL"){
+   state.hiddenCourses={};
+ }else{
+   const idx=Number(n)-1;
+   if(!Number.isInteger(idx)||!hidden[idx])return toast("編號無效");
+   delete state.hiddenCourses[hidden[idx].id];
+ }
+ save();plan=schedule();closeLessonSheet();renderAll();toast("已恢復隱藏課程");
+};
+
+$("#exportData").onclick=()=>{
+ const payload={version:"3.0",exportedAt:new Date().toISOString(),state};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);
+ a.download=`StudyOS_backup_${dateKey(new Date())}.json`;
+ a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+ toast("備份已匯出");
+};
+
+$("#importData").onchange=async e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ try{
+   const payload=JSON.parse(await file.text());
+   const incoming=payload.state||payload;
+   if(!incoming.settings||!incoming.progress)throw new Error("格式錯誤");
+   if(!confirm("匯入後會覆蓋目前資料，確定繼續？"))return;
+   localStorage.setItem("studyos-state",JSON.stringify(incoming));
+   location.reload();
+ }catch(err){toast("備份檔格式錯誤")}
+ e.target.value="";
+};
+
 function renderAll(){renderToday();renderDashboard();renderCalendar();renderSubjects();renderSettings()}
-function toast(t){let e=$("#toast");e.textContent=t;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),1800)}
+let undoTimer=null;
+function toast(t,undoFn=null){let e=$("#toast");e.innerHTML=`<span>${escapeHtml(t)}</span>${undoFn?'<button class="undo-btn" type="button">復原</button>':''}`;e.classList.add("show");clearTimeout(undoTimer);if(undoFn)e.querySelector(".undo-btn").onclick=()=>{undoFn();e.classList.remove("show");toast("已復原")};undoTimer=setTimeout(()=>e.classList.remove("show"),undoFn?8000:2200)}
 $("#prevMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()-1);renderCalendar()};$("#nextMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()+1);renderCalendar()};
 $("#saveNote").onclick=()=>{if(!state.selectedDate)return toast("請先選擇日期");state.notes[state.selectedDate]={text:$("#noteInput").value,capacity:+$("#capacityInput").value};save();plan=schedule();renderAll();toast("行事曆已儲存並重新排程")};
 $("#saveSettings").onclick=()=>{state.settings={...state.settings,startDate:$("#startDate").value,examDate:$("#examDate").value,weekdayCap:+$("#weekdayCap").value,saturdayCap:+$("#saturdayCap").value,sundayCap:+$("#sundayMode").value};save();plan=schedule();renderAll();toast("設定已更新")};
