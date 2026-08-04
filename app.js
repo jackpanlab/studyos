@@ -105,3 +105,22 @@ $("#resetAll").onclick=()=>{if(confirm("確定重設所有進度與備註？")){
 $$("[data-go]").forEach(b=>b.onclick=()=>document.getElementById(b.dataset.go).scrollIntoView({behavior:"smooth"}));
 const io=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting&&e.target.classList.add("visible")),{threshold:.12});$$(".reveal").forEach(e=>io.observe(e));
 renderAll();
+
+// v2 scroll motion: lightweight, no external library.
+const heroTitle = document.querySelector(".hero-title");
+const heroSection = document.querySelector(".hero");
+let ticking = false;
+function updateScrollMotion(){
+  const y = window.scrollY;
+  const h = Math.max(1, heroSection.offsetHeight);
+  const p = Math.min(1, y / h);
+  if(heroTitle){
+    heroTitle.style.transform = `translate3d(0,${p*70}px,0) scale(${1-p*.08})`;
+    heroTitle.style.opacity = String(1-p*.62);
+  }
+  ticking = false;
+}
+window.addEventListener("scroll",()=>{
+  if(!ticking){requestAnimationFrame(updateScrollMotion);ticking=true}
+},{passive:true});
+updateScrollMotion();

@@ -20,19 +20,21 @@
 
 <main>
 <section id="today" class="hero section">
+  <div class="hero-orb orb-a"></div>
+  <div class="hero-orb orb-b"></div>
   <div class="eyebrow">2027 NYCU Graduate Exam</div>
-  <h1><span id="daysLeft">—</span> days.<br>Today matters.</h1>
+  <h1 class="hero-title"><span id="daysLeft">—</span><small>days left</small><br><em>Today matters.</em></h1>
   <p id="todayLabel" class="sub"></p>
   <div id="todayTasks" class="today-grid"></div>
   <div class="hero-meta">
     <div><span>今日剩餘</span><strong id="todayRemaining">0 分鐘</strong></div>
     <div><span>連續完成</span><strong id="streak">0 天</strong></div>
   </div>
-  <div class="scroll-cue">往下查看詳細進度 ↓</div>
+  <div class="scroll-cue"><span>Scroll to explore</span><b>↓</b></div>
 </section>
 
 <section id="dashboard" class="section reveal">
-  <div class="section-head"><span>Progress</span><h2>讓進度自己說話。</h2></div>
+  <div class="section-head sticky-copy"><span>Progress</span><h2>讓每一次完成，<br>都推動下一步。</h2></div>
   <div class="stats">
     <article class="glass"><span>本週完成率</span><strong id="weekRate">0%</strong><div class="bar"><i id="weekBar"></i></div></article>
     <article class="glass"><span>目前狀態</span><strong id="deltaText">準時</strong><p id="deltaSubjects"></p></article>
@@ -42,7 +44,7 @@
 </section>
 
 <section id="calendar" class="section reveal">
-  <div class="section-head"><span>Calendar</span><h2>行程改變，計畫也跟著改變。</h2></div>
+  <div class="section-head sticky-copy"><span>Calendar</span><h2>行程改變，<br>計畫跟著改變。</h2></div>
   <div class="calendar-wrap glass">
     <div class="calendar-toolbar"><button id="prevMonth">←</button><h3 id="monthLabel"></h3><button id="nextMonth">→</button></div>
     <div class="weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
@@ -56,7 +58,7 @@
 </section>
 
 <section id="subjects" class="section reveal">
-  <div class="section-head"><span>Subjects</span><h2>五科，全都掌握。</h2></div>
+  <div class="section-head sticky-copy"><span>Subjects</span><h2>五科進度，<br>一眼掌握。</h2></div>
   <div id="subjectAccordion" class="accordion"></div>
 </section>
 

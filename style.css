@@ -26,3 +26,57 @@ input,select{border:1px solid var(--line);border-radius:12px;padding:10px 12px;b
 .settings-card{display:grid;gap:16px;max-width:650px}.settings-card label{display:flex;justify-content:space-between;align-items:center}.settings-card .ghost{background:#eee;color:#111}
 .toast{position:fixed;bottom:28px;left:50%;transform:translate(-50%,30px);opacity:0;background:#111;color:#fff;padding:13px 18px;border-radius:999px;transition:.35s;z-index:50}.toast.show{opacity:1;transform:translate(-50%,0)}
 @media(max-width:850px){.nav nav button{font-size:0}.nav nav button::first-letter{font-size:16px}.section{padding-left:5vw;padding-right:5vw}.stats{grid-template-columns:1fr}.hero h1{font-size:64px}.hero-meta{flex-direction:column;gap:18px}.progress-row{grid-template-columns:95px 1fr 50px}.day{min-height:72px;padding:8px}.lesson{grid-template-columns:1fr 90px}.lesson span:last-child{display:none}}
+
+/* StudyOS v2 — Apple-inspired visual layer */
+body{
+  background:
+    radial-gradient(circle at 15% 8%, rgba(74,144,226,.12), transparent 30%),
+    radial-gradient(circle at 85% 22%, rgba(180,150,255,.10), transparent 32%),
+    linear-gradient(180deg,#f8f8fa 0%,#f3f3f5 45%,#f8f8fa 100%);
+  overflow-x:hidden;
+}
+.nav{height:62px;padding-inline:6vw;background:rgba(248,248,250,.64);box-shadow:0 1px 0 rgba(0,0,0,.04)}
+.brand{font-size:18px}
+.hero{position:relative;isolation:isolate;min-height:118vh;overflow:hidden}
+.hero::after{content:"";position:absolute;z-index:-2;inset:45% -20% -20%;background:linear-gradient(180deg,transparent,rgba(255,255,255,.9))}
+.hero-orb{position:absolute;z-index:-1;border-radius:50%;filter:blur(6px);opacity:.65;animation:orbFloat 11s ease-in-out infinite}
+.orb-a{width:38vw;height:38vw;left:-14vw;top:8vh;background:radial-gradient(circle at 35% 35%,rgba(80,150,255,.45),rgba(160,110,255,.08) 65%,transparent 72%)}
+.orb-b{width:34vw;height:34vw;right:-13vw;top:24vh;background:radial-gradient(circle at 45% 45%,rgba(255,160,120,.32),rgba(255,210,150,.05) 65%,transparent 73%);animation-delay:-5s}
+@keyframes orbFloat{50%{transform:translate3d(0,32px,0) scale(1.06)}}
+.hero-title{font-weight:700}
+.hero-title small{display:inline-block;margin-left:.18em;font-size:.13em;letter-spacing:-.02em;color:var(--muted);vertical-align:top;padding-top:.6em}
+.hero-title em{font-style:normal;background:linear-gradient(90deg,#151515,#65656b);-webkit-background-clip:text;color:transparent}
+.today-grid{perspective:1600px}
+.task{transform-style:preserve-3d;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(255,255,255,.58));box-shadow:0 25px 90px rgba(32,36,48,.09)}
+.task:hover{transform:translateY(-9px) rotateX(1deg) rotateY(-1deg)}
+.check{background:rgba(255,255,255,.52)}
+.check:hover{background:white;transform:translateY(-1px)}
+.check.done{background:linear-gradient(135deg,#171719,#333338)}
+.scroll-cue{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+.scroll-cue b{font-size:28px;font-weight:400}
+.section{position:relative}
+.section-head.sticky-copy{position:sticky;top:100px;z-index:0;pointer-events:none}
+.stats,.progress-list,.calendar-wrap,.note-editor,.accordion,.settings-card{position:relative;z-index:1}
+.stats{margin-top:32vh}
+.glass{background:linear-gradient(145deg,rgba(255,255,255,.82),rgba(255,255,255,.55));box-shadow:0 28px 90px rgba(23,27,39,.08)}
+.stats article{min-height:250px;display:flex;flex-direction:column;justify-content:flex-end}
+.stats strong{font-size:clamp(46px,6vw,84px)}
+.progress-list{padding:18px 28px;border-radius:30px;background:rgba(255,255,255,.62);backdrop-filter:blur(24px)}
+.progress-row{padding-block:26px}
+.calendar-wrap{margin-top:30vh}
+.calendar-toolbar h3{font-size:32px;letter-spacing:-.04em}
+.day{background:rgba(255,255,255,.62);backdrop-filter:blur(12px)}
+.day:hover,.day.selected{background:#fff;box-shadow:0 15px 40px rgba(0,0,0,.08)}
+.note-editor{box-shadow:0 25px 80px rgba(0,0,0,.07)}
+.accordion{margin-top:30vh}
+.subject-head{font-size:22px;padding:30px}
+.subject-card{box-shadow:0 18px 65px rgba(0,0,0,.055)}
+.settings-card{margin-top:20vh}
+@media(max-width:850px){
+ .hero{min-height:105vh}
+ .hero-title small{display:block;margin:.45em 0 0;font-size:.18em}
+ .stats,.calendar-wrap,.accordion{margin-top:16vh}
+ .section-head.sticky-copy{position:relative;top:auto}
+ .orb-a,.orb-b{width:80vw;height:80vw}
+}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
