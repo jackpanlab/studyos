@@ -11,6 +11,15 @@ state.segmentChecks=state.segmentChecks||{};
 state.studyProgress=state.studyProgress||{};
 state.dailyConsumed=state.dailyConsumed||{};
 state.dayHistory=state.dayHistory||{};
+if(!state.migrations)state.migrations={};
+if(!state.migrations.originalDurationV56){
+  // 舊版 dailyConsumed 可能混入倍速壓縮分鐘；清除當日容量紀錄，
+  // 保留課程觀看位置、筆記、完成狀態與預習清單。
+  state.dailyConsumed={};
+  state.segmentChecks={};
+  state.migrations.originalDurationV56=true;
+  save();
+}
 const ORIGINAL_COURSES=COURSES.map(c=>({...c}));
 COURSES.forEach(course=>{const edit=state.courseEdits[course.id];if(edit){if(edit.name)course.name=edit.name;if(edit.duration){course.duration=edit.duration;course.seconds=durationToSeconds(edit.duration)}}});
 const save=()=>localStorage.setItem("studyos-state",JSON.stringify(state));
@@ -44,9 +53,14 @@ function remainingSourceSeconds(c){
 }
 
 function wallToSourceSeconds(wallSeconds,c){
- return Math.max(0,wallSeconds)*playbackRateFor(c);
+ // 舊函式名稱保留相容性，但現在 1 排程秒＝1 原始影片秒。
+ return Math.max(0,wallSeconds);
 }
 function sourceToWallSeconds(sourceSeconds,c){
+ // 預習與正式排程皆顯示原始片長，不再被播放倍速壓縮。
+ return Math.max(0,sourceSeconds);
+}
+function estimatedPlaybackSeconds(sourceSeconds,c){
  return Math.max(0,sourceSeconds)/playbackRateFor(c);
 }
 function isFinalScheduledSegment(task){
@@ -58,7 +72,8 @@ function playbackRateFor(c){
  return Math.max(1,+state.lessonMeta[c.id]?.playbackRate||1.5);
 }
 function remainingWallSeconds(c){
- return remainingSourceSeconds(c)/playbackRateFor(c);
+ // StudyOS 5.6：排程容量與課程進度一律採原始片長。
+ return remainingSourceSeconds(c);
 }
 function nextUnfinishedCourse(subject){
  return subjectCourses(subject)
@@ -163,12 +178,11 @@ function schedule(){
      .filter(c=>!lessonDone(c.id))
      .map(c=>{
        const startSource=completedSourceSeconds(c);
-       const rate=playbackRateFor(c);
        return {
          course:c,
          sourceCursor:startSource,
          sourceRemaining:Math.max(0,c.seconds-startSource),
-         rate
+         rate:1
        };
      });
  });
@@ -215,7 +229,7 @@ function schedule(){
 
      // 至少排 1 分鐘；嚴格只處理該科最前面的未完成課程。
      const allocated=Math.min(wallRemaining,remaining);
-     const sourceAllocated=Math.min(entry.sourceRemaining,allocated*entry.rate);
+     const sourceAllocated=Math.min(entry.sourceRemaining,allocated);
      const startSource=entry.sourceCursor;
      const endSource=startSource+sourceAllocated;
      const partial=endSource<entry.course.seconds-1;
@@ -279,16 +293,15 @@ function buildTodayTasks(){
 
  const pushCourse=(c,pinned=false)=>{
    if(!c||usedIds.has(c.id)||lessonDone(c.id)||remaining<60)return false;
-   const rate=playbackRateFor(c);
+   const rate=1;
    const sourceStart=completedSourceSeconds(c);
    const sourceRemaining=remainingSourceSeconds(c);
    if(sourceRemaining<=1)return false;
 
-   const wallNeeded=sourceRemaining/rate;
-   const allocated=Math.min(wallNeeded,remaining);
+   const allocated=Math.min(sourceRemaining,remaining);
    if(allocated<60)return false;
 
-   const sourceAllocated=Math.min(sourceRemaining,allocated*rate);
+   const sourceAllocated=Math.min(sourceRemaining,allocated);
    const sourceEnd=Math.min(c.seconds,sourceStart+sourceAllocated);
    const finalSegment=sourceEnd>=c.seconds-1;
 
@@ -355,12 +368,11 @@ function buildTodayTasks(){
      const sourceRemaining=Math.max(0,c.seconds-baseStart);
      if(sourceRemaining<=1)break;
 
-     const rate=playbackRateFor(c);
-     const wallNeeded=sourceRemaining/rate;
-     const allocated=Math.min(wallNeeded,remaining);
+     const rate=1;
+     const allocated=Math.min(sourceRemaining,remaining);
      if(allocated<60)break;
 
-     const sourceAllocated=Math.min(sourceRemaining,allocated*rate);
+     const sourceAllocated=Math.min(sourceRemaining,allocated);
      const sourceEnd=Math.min(c.seconds,baseStart+sourceAllocated);
 
      result.push({
@@ -420,9 +432,14 @@ function taskCard(c,index,todayKey){
  const checks=state.segmentChecks[key]||{};
  const allocated=c.allocated||0;
  const finalSegment=isFinalScheduledSegment(c);
+ const rate=playbackRateFor(c);
+ const estimated=allocated/rate;
  const segmentText=finalSegment
-   ?`今日安排 ${fmtSec(allocated)}｜完成今日內容後，本堂課即完成`
-   :`今日安排 ${fmtSec(allocated)}｜整堂 ${c.duration}`;
+   ?`今日課程進度 ${fmtSec(allocated)}｜完成後，本堂課即完成`
+   :`今日課程進度 ${fmtSec(allocated)}｜整堂原始片長 ${c.duration}`;
+ const speedText=rate!==1
+   ?`播放倍速 ${rate}×，預估實際觀看約 ${fmtSec(estimated)}`
+   :`播放倍速 1×`;
 
  return `<article class="task" style="--accent:${c.color}" data-task-segment="${escapeHtml(key)}">
    <div class="task-top">
@@ -431,7 +448,8 @@ function taskCard(c,index,todayKey){
    </div>
    <h3>${escapeHtml(c.scheduleLabel||c.name)}</h3>
    <div class="duration">${segmentText}</div>
-   ${!finalSegment?`<div class="task-segment-note">完成今日四項後，只記錄今天安排的這一段；下次會從影片 ${secondsToClock(c.sourceEnd)} 繼續。</div>`:`<div class="task-segment-note final-segment-note">完成今日四項後，本堂課將標記完成。</div>`}
+   <div class="playback-estimate">${speedText}</div>
+   ${!finalSegment?`<div class="task-segment-note">完成今日四項後，只記錄原始片長中的這一段；下次會從 ${secondsToClock(c.sourceEnd)} 繼續。</div>`:`<div class="task-segment-note final-segment-note">完成今日四項後，本堂課將標記完成。</div>`}
    <div class="checks">
      ${["video:影片","notes:教材","examples:例題","exercises:習題"].map(x=>{
        const [k,n]=x.split(":");
@@ -469,7 +487,7 @@ function commitScheduledSegment(key){
      id:task.id,
      subject:task.subject,
      name:task.name,
-     wallSeconds:task.allocated||0,
+     sourceSeconds:task.allocated||0,
      sourceStart:task.sourceStart||0,
      sourceEnd:task.sourceEnd||0,
      completedAt:new Date().toISOString(),
@@ -509,7 +527,7 @@ function finishWholeCourse(key){
  if(!confirm(`確定「${task.name}」整堂已看完？\n\n這會直接完成整堂並更新後續排程。`))return;
 
  const todayKey=dateKey(new Date());
- const remainingWall=remainingWallSeconds(task);
+ const remainingOriginal=remainingSourceSeconds(task);
 
  state.studyProgress[task.id]=task.seconds;
  state.lessonMeta[task.id]={
@@ -521,14 +539,14 @@ function finishWholeCourse(key){
    video:true,notes:true,examples:true,exercises:true,
    updated:new Date().toISOString()
  };
- state.dailyConsumed[todayKey]=(+state.dailyConsumed[todayKey]||0)+Math.max(task.allocated||0,remainingWall);
+ state.dailyConsumed[todayKey]=(+state.dailyConsumed[todayKey]||0)+Math.max(task.allocated||0,remainingOriginal);
  state.dayHistory[todayKey]=[
    ...(state.dayHistory[todayKey]||[]),
    {
      id:task.id,
      subject:task.subject,
      name:task.name,
-     wallSeconds:Math.max(task.allocated||0,remainingWall),
+     sourceSeconds:remainingSourceSeconds(task),
      sourceStart:task.sourceStart||0,
      sourceEnd:task.seconds,
      completedAt:new Date().toISOString(),
@@ -607,10 +625,7 @@ function futurePreviewCandidates(limit=30){
  return all.slice(0,limit);
 }
 function previewCourseMinutes(c){
- const meta=state.lessonMeta[c.id]||{};
- const watched=durationToSeconds(meta.watchPosition||"00:00:00");
- const rate=Math.max(1,+meta.playbackRate||1.5);
- const remaining=Math.max(0,(c.seconds-watched)/rate);
+ const remaining=remainingSourceSeconds(c);
  return Math.max(15*60,Math.min(60*60,remaining||30*60));
 }
 
@@ -632,8 +647,8 @@ function renderPreview(){
        <span>${escapeHtml(c.subject)}${c.scheduledDate?`｜預計 ${c.scheduledDate}`:"｜尚未排定"}</span>
        <h5>${escapeHtml(c.name)}${c.isPartiallyWatched?"（未完成）":""}</h5>
        <p>${c.isPartiallyWatched
-         ?`目前看到 ${secondsToClock(completedSourceSeconds(c))}｜剩餘 ${fmtSec(sourceToWallSeconds(c.remainingSource,c))}`
-         :`整堂約 ${fmtSec(sourceToWallSeconds(c.seconds,c))}`}</p>
+         ?`目前看到 ${secondsToClock(completedSourceSeconds(c))}｜課程剩餘 ${fmtSec(c.remainingSource)}`
+         :`課程原始片長 ${fmtSec(c.seconds)}`}</p>
      </div>
      <button type="button" data-add-preview="${c.id}">加入預習</button>
    </article>`).join(""):`<p class="empty-copy">目前沒有可選的未來課程。</p>`;
@@ -843,7 +858,7 @@ $("#restoreHidden").onclick=()=>{
 };
 
 $("#exportData").onclick=()=>{
- const payload={version:"5.5",exportedAt:new Date().toISOString(),state};
+ const payload={version:"5.6",exportedAt:new Date().toISOString(),state};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
  const a=document.createElement("a");
  a.href=URL.createObjectURL(blob);

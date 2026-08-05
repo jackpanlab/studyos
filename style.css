@@ -450,3 +450,12 @@ body.sheet-open{overflow:hidden}
 .preview-course p{
   line-height:1.5;
 }
+
+
+/* StudyOS 5.6 — 原始片長統一 */
+.playback-estimate{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+}

@@ -1,4 +1,4 @@
-const CACHE = 'studyos-v5.5-live-today-preview';
+const CACHE = 'studyos-v5.6-original-duration';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './manifest.json'];
 
 self.addEventListener('install', event => {
