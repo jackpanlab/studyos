@@ -7,6 +7,10 @@ state.courseEdits=state.courseEdits||{};
 state.hiddenCourses=state.hiddenCourses||{};
 state.lessonMeta=state.lessonMeta||{};
 state.previewQueue=Array.isArray(state.previewQueue)?state.previewQueue:[];
+state.segmentChecks=state.segmentChecks||{};
+state.studyProgress=state.studyProgress||{};
+state.dailyConsumed=state.dailyConsumed||{};
+state.dayHistory=state.dayHistory||{};
 const ORIGINAL_COURSES=COURSES.map(c=>({...c}));
 COURSES.forEach(course=>{const edit=state.courseEdits[course.id];if(edit){if(edit.name)course.name=edit.name;if(edit.duration){course.duration=edit.duration;course.seconds=durationToSeconds(edit.duration)}}});
 const save=()=>localStorage.setItem("studyos-state",JSON.stringify(state));
@@ -20,7 +24,43 @@ const subjectUnlock=subj=>{
  if(subj==="結構學")return subjectRate("材料力學")>=1 && subjectRate("靜力學")>=.5;
  return true;
 };
-const lessonDone=id=>{let p=state.progress[id]||{};return ["video","notes","examples","exercises"].every(k=>p[k])};
+const legacyAllPartsDone=id=>{
+ const p=state.progress[id]||{};
+ return ["video","notes","examples","exercises"].every(k=>p[k]);
+};
+function completedSourceSeconds(c){
+ const meta=state.lessonMeta[c.id]||{};
+ const manual=durationToSeconds(meta.watchPosition||"00:00:00");
+ const tracked=+state.studyProgress[c.id]||0;
+ const legacy=legacyAllPartsDone(c.id)?c.seconds:0;
+ return Math.min(c.seconds,Math.max(manual,tracked,legacy));
+}
+const lessonDone=id=>{
+ const c=COURSES.find(x=>x.id===id);
+ return !!c && completedSourceSeconds(c)>=c.seconds-1;
+};
+function remainingSourceSeconds(c){
+ return Math.max(0,c.seconds-completedSourceSeconds(c));
+}
+function playbackRateFor(c){
+ return Math.max(1,+state.lessonMeta[c.id]?.playbackRate||1.5);
+}
+function remainingWallSeconds(c){
+ return remainingSourceSeconds(c)/playbackRateFor(c);
+}
+function nextUnfinishedCourse(subject){
+ return subjectCourses(subject)
+   .sort((a,b)=>(a.order||0)-(b.order||0))
+   .find(c=>!lessonDone(c.id))||null;
+}
+function isSequentiallyAvailable(c){
+ return nextUnfinishedCourse(c.subject)?.id===c.id;
+}
+function remainingTodayCapacitySeconds(date=new Date()){
+ const key=dateKey(date);
+ const total=Math.max(0,dayCap(date))*60;
+ return Math.max(0,total-(+state.dailyConsumed[key]||0));
+}
 const subjectCourses=s=>COURSES.filter(c=>c.subject===s && !state.hiddenCourses[c.id]);
 const subjectRate=s=>{let a=subjectCourses(s);return a.length?a.filter(c=>lessonDone(c.id)).length/a.length:0};
 const subjectPriority={"材料力學":24,"微積分":22,"工程數學":20,"靜力學":18,"結構學":16};
@@ -32,10 +72,7 @@ const subjectDependencyReason={
  "結構學":"結構組核心專業科目"
 };
 function courseRemainingSeconds(c){
- const meta=state.lessonMeta[c.id]||{};
- const watched=durationToSeconds(meta.watchPosition||"00:00:00");
- const rate=Math.max(1,+meta.playbackRate||1.5);
- return Math.max(0,(c.seconds-watched)/rate);
+ return remainingWallSeconds(c);
 }
 function dueForReview(c){
  const updated=state.progress[c.id]?.updated;
@@ -87,79 +124,118 @@ function renderAdvice(){
    </article>`).join(""):`<p class="empty-copy">目前沒有額外建議，照既定排程完成即可。</p>`;
  $$("[data-apply-advice]").forEach(btn=>btn.onclick=()=>{
    const id=btn.dataset.applyAdvice;
+   const c=getCourse(id);
    state.lessonMeta[id]={...(state.lessonMeta[id]||{}),pinned:true};
-   save();plan=schedule();renderAll();toast("已設為今日必看，已優先排入今天");
+   save();plan=schedule();renderAll();
+   toast(c&&isSequentiallyAvailable(c)
+     ?"已設為今日必看，會優先排入今天"
+     :"已保留今日必看標記，但前序課程尚未完成；請用預習選取提前觀看");
  });
 }
 
 function schedule(){
  const result={};
- const start=new Date(state.settings.startDate+"T00:00:00");
+ const configuredStart=new Date(state.settings.startDate+"T00:00:00");
+ const today=new Date();today.setHours(0,0,0,0);
+ const start=configuredStart>today?configuredStart:today;
  const end=new Date(state.settings.examDate+"T00:00:00");
  const subjects=["材料力學","微積分","工程數學","靜力學","結構學"];
- const subjectColors=Object.fromEntries(subjects.map(subject=>[subject,COURSES.find(c=>c.subject===subject)?.color||"#777"]));
+ const subjectColors=Object.fromEntries(subjects.map(subject=>[
+   subject,COURSES.find(c=>c.subject===subject)?.color||"#777"
+ ]));
+
  const queues={};
  subjects.forEach(subject=>{
    queues[subject]=subjectCourses(subject)
+     .sort((a,b)=>(a.order||0)-(b.order||0))
      .filter(c=>!lessonDone(c.id))
-     .map(c=>({course:c,remaining:Math.max(1,courseRemainingSeconds(c))}));
+     .map(c=>{
+       const startSource=completedSourceSeconds(c);
+       const rate=playbackRateFor(c);
+       return {
+         course:c,
+         sourceCursor:startSource,
+         sourceRemaining:Math.max(0,c.seconds-startSource),
+         rate
+       };
+     });
  });
+
  const virtualDone=new Set(COURSES.filter(c=>lessonDone(c.id)).map(c=>c.id));
  const virtualRate=subject=>{
-   const all=COURSES.filter(c=>c.subject===subject && !state.hiddenCourses[c.id]);
+   const all=COURSES.filter(c=>c.subject===subject&&!state.hiddenCourses[c.id]);
    return all.length?all.filter(c=>virtualDone.has(c.id)).length/all.length:0;
  };
  const projectedUnlock=subject=>{
    if(subject==="工程數學")return virtualRate("微積分")>=1;
    if(subject==="靜力學")return virtualRate("材料力學")>=.7;
-   if(subject==="結構學")return virtualRate("材料力學")>=1 && virtualRate("靜力學")>=.5;
+   if(subject==="結構學")return virtualRate("材料力學")>=1&&virtualRate("靜力學")>=.5;
    return true;
  };
- const remainingLectures=()=>subjects.some(subject=>queues[subject].length);
+ const hasLectures=()=>subjects.some(subject=>queues[subject].length);
+
  let day=new Date(start),guard=0,subjectCursor=0,reviewCursor=0,reviewRound=1;
- while(day<=end && guard++<600){
-   const k=dateKey(day);
-   const cap=Math.max(0,dayCap(day))*60;
-   result[k]=[];
+ while(day<=end&&guard++<600){
+   const key=dateKey(day);
+   const isToday=key===dateKey(today);
+   const cap=isToday?remainingTodayCapacitySeconds(day):Math.max(0,dayCap(day))*60;
+   result[key]=[];
    let remaining=cap;
+
    if(cap<=0){day.setDate(day.getDate()+1);continue}
+
    let safety=0;
-   while(remaining>=900 && remainingLectures() && safety++<100){
-     let unlocked=subjects.filter(subject=>projectedUnlock(subject) && queues[subject].length);
-     if(!unlocked.length){
-       unlocked=subjects.filter(subject=>queues[subject].length);
-       if(!unlocked.length)break;
-     }
+   while(remaining>=60&&hasLectures()&&safety++<200){
+     let unlocked=subjects.filter(subject=>projectedUnlock(subject)&&queues[subject].length);
+     if(!unlocked.length)break;
+
      let subject=unlocked[subjectCursor%unlocked.length];
      subjectCursor++;
      let entry=queues[subject][0];
      if(!entry)continue;
-     if(entry.remaining>remaining && remaining<1800){
-       const fitting=unlocked.find(sub=>queues[sub][0] && queues[sub][0].remaining<=remaining);
-       if(fitting){subject=fitting;entry=queues[subject][0]}
-       else break;
+
+     const wallRemaining=entry.sourceRemaining/entry.rate;
+     if(wallRemaining<=0){
+       virtualDone.add(entry.course.id);
+       queues[subject].shift();
+       continue;
      }
-     const alloc=Math.min(entry.remaining,remaining);
-     result[k].push({
+
+     // 至少排 1 分鐘；嚴格只處理該科最前面的未完成課程。
+     const allocated=Math.min(wallRemaining,remaining);
+     const sourceAllocated=Math.min(entry.sourceRemaining,allocated*entry.rate);
+     const startSource=entry.sourceCursor;
+     const endSource=startSource+sourceAllocated;
+     const partial=endSource<entry.course.seconds-1;
+
+     result[key].push({
        ...entry.course,
-       allocated:alloc,
-       scheduledSeconds:alloc,
-       isPartial:alloc<entry.remaining,
-       scheduleLabel:alloc<entry.remaining?`${entry.course.name}（分段）`:entry.course.name
+       allocated,
+       scheduledSeconds:allocated,
+       sourceStart:startSource,
+       sourceEnd:endSource,
+       sourceAllocated,
+       playbackRate:entry.rate,
+       isPartial:partial,
+       scheduleLabel:partial?`${entry.course.name}（分段）`:entry.course.name
      });
-     entry.remaining-=alloc;
-     remaining-=alloc;
-     if(entry.remaining<=1){
+
+     entry.sourceCursor=endSource;
+     entry.sourceRemaining=Math.max(0,entry.sourceRemaining-sourceAllocated);
+     remaining-=allocated;
+
+     if(entry.sourceRemaining<=1){
        virtualDone.add(entry.course.id);
        queues[subject].shift();
      }
    }
-   while(remaining>=1800 && !remainingLectures()){
+
+   while(remaining>=1800&&!hasLectures()){
      const subject=subjects[reviewCursor%subjects.length];
      reviewCursor++;
      const alloc=Math.min(3600,remaining);
-     result[k].push({
-       id:`review-${k}-${reviewCursor}`,
+     result[key].push({
+       id:`review-${key}-${reviewCursor}`,
        subject,
        name:`第 ${reviewRound} 輪總複習`,
        duration:secondsToClock(alloc),
@@ -173,6 +249,7 @@ function schedule(){
      remaining-=alloc;
      if(reviewCursor%subjects.length===0)reviewRound++;
    }
+
    day.setDate(day.getDate()+1);
  }
  return result;
@@ -180,47 +257,76 @@ function schedule(){
 let plan=schedule();
 
 function buildTodayTasks(){
- const todayKey=dateKey(new Date());
- const cap=Math.max(0,dayCap(new Date()))*60;
- if(cap<=0)return [];
+ const today=new Date();
+ const todayKey=dateKey(today);
+ let remaining=remainingTodayCapacitySeconds(today);
+ if(remaining<=0)return [];
 
- let remaining=cap;
  const result=[];
  const usedIds=new Set();
 
- // 今日必看優先，而且只放未完成、未隱藏的課程。
+ // 今日必看只允許「該科目前最前面的未完成課」進正式進度。
+ // 跳級課程必須由預習區選取，不能破壞正式順序。
  const pinned=COURSES
-   .filter(c=>!state.hiddenCourses[c.id] && !lessonDone(c.id) && state.lessonMeta[c.id]?.pinned)
+   .filter(c=>
+     !state.hiddenCourses[c.id] &&
+     !lessonDone(c.id) &&
+     state.lessonMeta[c.id]?.pinned &&
+     isSequentiallyAvailable(c)
+   )
    .sort((a,b)=>(a.order||0)-(b.order||0));
 
  for(const c of pinned){
    if(remaining<60)break;
-   const needed=Math.max(60,courseRemainingSeconds(c));
-   const allocated=Math.min(needed,remaining);
+   const rate=playbackRateFor(c);
+   const sourceStart=completedSourceSeconds(c);
+   const sourceNeeded=remainingSourceSeconds(c);
+   const wallNeeded=sourceNeeded/rate;
+   const allocated=Math.min(wallNeeded,remaining);
+   const sourceAllocated=Math.min(sourceNeeded,allocated*rate);
+   const sourceEnd=sourceStart+sourceAllocated;
+
    result.push({
      ...c,
      allocated,
      scheduledSeconds:allocated,
-     isPartial:allocated+1<needed,
+     sourceStart,
+     sourceEnd,
+     sourceAllocated,
+     playbackRate:rate,
+     isPartial:sourceEnd<c.seconds-1,
      isPinnedToday:true,
-     scheduleLabel:allocated+1<needed?`${c.name}（今日必看・分段）`:`${c.name}（今日必看）`
+     scheduleLabel:sourceEnd<c.seconds-1
+       ?`${c.name}（今日必看・分段）`
+       :`${c.name}（今日必看）`
    });
    usedIds.add(c.id);
    remaining-=allocated;
  }
 
- // 用原本正式排程填滿剩餘容量；避免重複同一堂。
+ // 接續今日正式排程；同一科仍只會從最前面的未完成課往後。
  for(const original of plan[todayKey]||[]){
    if(remaining<60)break;
-   if(usedIds.has(original.id))continue;
-   const available=Math.max(60,original.allocated||original.seconds||0);
-   const allocated=Math.min(available,remaining);
+   if(original.isReview||usedIds.has(original.id))continue;
+   if(!isSequentiallyAvailable(original))continue;
+
+   const allocated=Math.min(original.allocated||0,remaining);
+   if(allocated<1)continue;
+   const rate=original.playbackRate||playbackRateFor(original);
+   const sourceStart=completedSourceSeconds(original);
+   const sourceNeeded=remainingSourceSeconds(original);
+   const sourceAllocated=Math.min(sourceNeeded,allocated*rate);
+   const sourceEnd=sourceStart+sourceAllocated;
+
    result.push({
      ...original,
      allocated,
-     scheduledSeconds:allocated,
-     isPartial:allocated+1<(original.seconds||available),
-     scheduleLabel:allocated+1<(original.seconds||available)
+     sourceStart,
+     sourceEnd,
+     sourceAllocated,
+     playbackRate:rate,
+     isPartial:sourceEnd<original.seconds-1,
+     scheduleLabel:sourceEnd<original.seconds-1
        ?`${original.name}（分段）`
        :original.name
    });
@@ -230,7 +336,6 @@ function buildTodayTasks(){
 
  return result;
 }
-
 function renderToday(){
  const now=new Date();
  const today=dateKey(now);
@@ -239,6 +344,7 @@ function renderToday(){
  let exam=new Date(state.settings.examDate+"T00:00:00");
  $("#daysLeft").textContent=Math.max(0,Math.ceil((exam-now)/86400000));
 
+ currentTodayTasks={};
  $("#todayTasks").innerHTML=tasks.length
    ?tasks.map((task,index)=>taskCard(task,index,today)).join("")
    :`<article class="task" style="--accent:#888"><div class="pill">Today</div><h3>今天沒有排課</h3><p class="duration">休息，或從下方選擇未來課程先預習。</p></article>`;
@@ -255,40 +361,158 @@ function renderToday(){
  renderPreview();
 }
 
-function taskCard(c,index,todayKey){
- const p=state.progress[c.id]||{};
- const allocated=c.allocated||c.seconds||0;
- const full=c.seconds||allocated;
- const partial=allocated+1<full;
- const segmentText=partial?`今日安排 ${fmtSec(allocated)}｜整堂 ${c.duration}`:`今日安排 ${fmtSec(allocated)}`;
- const label=c.scheduleLabel||c.name;
+let currentTodayTasks={};
 
- return `<article class="task" style="--accent:${c.color}">
+function segmentKeyFor(task,todayKey){
+ return `${todayKey}|${task.id}|${Math.round(task.sourceStart||0)}|${Math.round(task.sourceEnd||0)}`;
+}
+
+function taskCard(c,index,todayKey){
+ const key=segmentKeyFor(c,todayKey);
+ currentTodayTasks[key]=c;
+ const checks=state.segmentChecks[key]||{};
+ const allocated=c.allocated||0;
+ const partial=c.sourceEnd<c.seconds-1;
+ const segmentText=partial
+   ?`今日安排 ${fmtSec(allocated)}｜整堂 ${c.duration}`
+   :`今日安排 ${fmtSec(allocated)}｜本段完成即看完整堂`;
+
+ return `<article class="task" style="--accent:${c.color}" data-task-segment="${escapeHtml(key)}">
    <div class="task-top">
      <span class="pill">${escapeHtml(c.subject)}</span>
      <span>${secondsToClock(allocated)}</span>
    </div>
-   <h3>${escapeHtml(label)}</h3>
+   <h3>${escapeHtml(c.scheduleLabel||c.name)}</h3>
    <div class="duration">${segmentText}</div>
-   ${partial?`<div class="task-segment-note">這只是今天的分段時數，不代表今天要看完整堂。</div>`:""}
+   ${partial?`<div class="task-segment-note">四項全勾只會完成今天這一段，後續會從 ${secondsToClock(c.sourceEnd)} 接著排。</div>`:""}
    <div class="checks">
      ${["video:影片","notes:教材","examples:例題","exercises:習題"].map(x=>{
-       let [k,n]=x.split(":");
-       return `<label class="check ${p[k]?"done":""}">
+       const [k,n]=x.split(":");
+       return `<label class="check ${checks[k]?"done":""}">
          <span>${n}</span>
-         <input type="checkbox" data-id="${c.id}" data-key="${k}" ${p[k]?"checked":""}>
-         <b>${p[k]?"✓":"○"}</b>
+         <input type="checkbox" data-segment-key="${escapeHtml(key)}" data-key="${k}" ${checks[k]?"checked":""}>
+         <b>${checks[k]?"✓":"○"}</b>
        </label>`;
      }).join("")}
+   </div>
+   <div class="task-actions">
+     <span>完成狀態：${partial?"今日分段":"本堂最後一段"}</span>
+     <button class="finish-all-button" type="button" data-finish-all="${escapeHtml(key)}">看完全部</button>
    </div>
  </article>`;
 }
 
-function todayFormalDone(){
- const tasks=plan[dateKey(new Date())]||[];
- return tasks.length===0||tasks.every(t=>lessonDone(t.id));
+function commitScheduledSegment(key){
+ const task=currentTodayTasks[key];
+ if(!task)return;
+ const todayKey=dateKey(new Date());
+
+ state.studyProgress[task.id]=Math.max(
+   +state.studyProgress[task.id]||0,
+   task.sourceEnd||0
+ );
+ state.lessonMeta[task.id]={
+   ...(state.lessonMeta[task.id]||{}),
+   watchPosition:secondsToClock(state.studyProgress[task.id])
+ };
+ state.dailyConsumed[todayKey]=(+state.dailyConsumed[todayKey]||0)+(task.allocated||0);
+ state.dayHistory[todayKey]=[
+   ...(state.dayHistory[todayKey]||[]),
+   {
+     id:task.id,
+     subject:task.subject,
+     name:task.name,
+     wallSeconds:task.allocated||0,
+     sourceStart:task.sourceStart||0,
+     sourceEnd:task.sourceEnd||0,
+     completedAt:new Date().toISOString(),
+     mode:"segment"
+   }
+ ];
+ delete state.segmentChecks[key];
+
+ if(state.studyProgress[task.id]>=task.seconds-1){
+   state.studyProgress[task.id]=task.seconds;
+   state.progress[task.id]={
+     ...(state.progress[task.id]||{}),
+     video:true,notes:true,examples:true,exercises:true,
+     updated:new Date().toISOString()
+   };
+ }
+
+ save();
+ plan=schedule();
+ renderAll();
+ toast(state.studyProgress[task.id]>=task.seconds-1
+   ?`已看完 ${task.name}`
+   :`已完成 ${task.name} 的今日 ${fmtSec(task.allocated)}，下次會從 ${secondsToClock(task.sourceEnd)} 接著排`
+ );
 }
 
+function finishWholeCourse(key){
+ const task=currentTodayTasks[key];
+ if(!task)return;
+ if(!confirm(`確定已經完整看完「${task.name}」？`))return;
+
+ const todayKey=dateKey(new Date());
+ const remainingWall=remainingWallSeconds(task);
+
+ state.studyProgress[task.id]=task.seconds;
+ state.lessonMeta[task.id]={
+   ...(state.lessonMeta[task.id]||{}),
+   watchPosition:task.duration
+ };
+ state.progress[task.id]={
+   ...(state.progress[task.id]||{}),
+   video:true,notes:true,examples:true,exercises:true,
+   updated:new Date().toISOString()
+ };
+ state.dailyConsumed[todayKey]=(+state.dailyConsumed[todayKey]||0)+Math.max(task.allocated||0,remainingWall);
+ state.dayHistory[todayKey]=[
+   ...(state.dayHistory[todayKey]||[]),
+   {
+     id:task.id,
+     subject:task.subject,
+     name:task.name,
+     wallSeconds:Math.max(task.allocated||0,remainingWall),
+     sourceStart:task.sourceStart||0,
+     sourceEnd:task.seconds,
+     completedAt:new Date().toISOString(),
+     mode:"full"
+   }
+ ];
+ delete state.segmentChecks[key];
+
+ save();
+ plan=schedule();
+ renderAll();
+ toast(`已完整看完 ${task.name}`);
+}
+
+function bindChecks(){
+ $$("[data-segment-key]").forEach(input=>input.onchange=()=>{
+   const key=input.dataset.segmentKey;
+   state.segmentChecks[key]={
+     ...(state.segmentChecks[key]||{}),
+     [input.dataset.key]:input.checked
+   };
+   save();
+
+   const all=["video","notes","examples","exercises"].every(k=>state.segmentChecks[key]?.[k]);
+   if(all){
+     commitScheduledSegment(key);
+   }else{
+     renderToday();
+   }
+ });
+
+ $$("[data-finish-all]").forEach(button=>button.onclick=()=>{
+   finishWholeCourse(button.dataset.finishAll);
+ });
+}
+function todayFormalDone(){
+ return remainingTodayCapacitySeconds(new Date())<=0 || buildTodayTasks().length===0;
+}
 function futurePreviewCandidates(limit=12){
  const today=new Date();
  const seen=new Set(state.previewQueue);
@@ -367,12 +591,6 @@ function renderPreview(){
  });
 
  $$("[data-open-preview]").forEach(btn=>btn.onclick=()=>openLessonSheet(btn.dataset.openPreview));
-}
-function bindChecks(){
- $$(".check input").forEach(i=>i.onchange=()=>{
-  state.progress[i.dataset.id]={...(state.progress[i.dataset.id]||{}),[i.dataset.key]:i.checked,updated:new Date().toISOString()};
-  save(); plan=schedule(); renderAll(); toast("進度已更新，排程已自動重算");
- });
 }
 function calcStreak(){
  let d=new Date(),n=0;
@@ -484,7 +702,15 @@ function openLessonSheet(id){
  document.body.classList.add("sheet-open");
 }
 function closeLessonSheet(){$("#lessonSheet").classList.remove("open");$("#lessonSheet").setAttribute("aria-hidden","true");document.body.classList.remove("sheet-open");activeCourseId=null}
-function completeAllParts(id,done){state.progress[id]={...(state.progress[id]||{}),video:done,notes:done,examples:done,exercises:done,updated:new Date().toISOString()};save();plan=schedule();renderAll()}
+function completeAllParts(id,done){
+ const c=getCourse(id);
+ state.progress[id]={...(state.progress[id]||{}),video:done,notes:done,examples:done,exercises:done,updated:new Date().toISOString()};
+ if(c){
+   state.studyProgress[id]=done?c.seconds:0;
+   state.lessonMeta[id]={...(state.lessonMeta[id]||{}),watchPosition:done?c.duration:"00:00:00"};
+ }
+ save();plan=schedule();renderAll();
+}
 $$('[data-close-sheet]').forEach(el=>el.onclick=closeLessonSheet);document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLessonSheet()});
 $("#saveLessonEdit").onclick=()=>{
  if(!activeCourseId)return;
@@ -509,7 +735,10 @@ $("#saveLessonEdit").onclick=()=>{
  };
  c.name=name;c.duration=duration;c.seconds=seconds;
  save();plan=schedule();closeLessonSheet();renderAll();
- toast(`已儲存 ${name}`,()=>{
+ const blockedPinned=state.lessonMeta[id]?.pinned&&!isSequentiallyAvailable(c);
+ toast(blockedPinned
+   ?`已儲存 ${name}；因前序課程尚未完成，不會跳進正式 Today，請從預習區選取`
+   :`已儲存 ${name}`,()=>{
    restoreCourseState(id,snap);
    if(oldMeta)state.lessonMeta[id]=oldMeta;else delete state.lessonMeta[id];
    save();renderAll();
@@ -536,7 +765,7 @@ $("#restoreHidden").onclick=()=>{
 };
 
 $("#exportData").onclick=()=>{
- const payload={version:"5.1",exportedAt:new Date().toISOString(),state};
+ const payload={version:"5.2",exportedAt:new Date().toISOString(),state};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
  const a=document.createElement("a");
  a.href=URL.createObjectURL(blob);

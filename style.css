@@ -383,3 +383,45 @@ body.sheet-open{overflow:hidden}
     padding-bottom:max(4px,env(safe-area-inset-bottom));
   }
 }
+
+
+/* StudyOS 5.2 — 循序排課、分段完成、看完全部 */
+.task-actions{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid rgba(0,0,0,.07);
+}
+.task-actions>span{
+  color:var(--muted);
+  font-size:12px;
+}
+.finish-all-button{
+  flex:0 0 auto;
+  border:1px solid rgba(0,0,0,.12);
+  border-radius:999px;
+  padding:8px 12px;
+  background:rgba(255,255,255,.72);
+  color:#111;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  transition:.18s ease;
+}
+.finish-all-button:hover{
+  background:#111;
+  color:#fff;
+  transform:translateY(-1px);
+}
+@media(max-width:620px){
+  .task-actions{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .finish-all-button{
+    width:100%;
+  }
+}
