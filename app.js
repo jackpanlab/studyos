@@ -1,4 +1,4 @@
-
+// StudyOS 6.0 Hotfix — initialization and missing helpers fixed
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const defaults={startDate:"2026-08-01",examDate:"2027-02-04",weekdayCap:180,saturdayCap:360,sundayCap:0};
 let state=JSON.parse(localStorage.getItem("studyos-state")||"null")||{settings:defaults,progress:{},notes:{},selectedDate:null,courseEdits:{},hiddenCourses:{}};
@@ -11,6 +11,7 @@ state.segmentChecks=state.segmentChecks||{};
 state.studyProgress=state.studyProgress||{};
 state.dailyConsumed=state.dailyConsumed||{};
 state.dayHistory=state.dayHistory||{};
+const save=()=>localStorage.setItem("studyos-state",JSON.stringify(state));
 if(!state.migrations)state.migrations={};
 if(!state.migrations.stableV60){
   state.dailyConsumed={};
@@ -20,7 +21,6 @@ if(!state.migrations.stableV60){
 }
 const ORIGINAL_COURSES=COURSES.map(c=>({...c}));
 COURSES.forEach(course=>{const edit=state.courseEdits[course.id];if(edit){if(edit.name)course.name=edit.name;if(edit.duration){course.duration=edit.duration;course.seconds=durationToSeconds(edit.duration)}}});
-const save=()=>localStorage.setItem("studyos-state",JSON.stringify(state));
 const pad=n=>String(n).padStart(2,"0");
 const fmtSec=s=>{s=Math.max(0,Math.round(s));let h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?`${h} 小時 ${m} 分`:`${m} 分鐘`};
 const dateKey=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -77,6 +77,24 @@ function remainingTodayCapacitySeconds(date=new Date()){
 }
 const subjectCourses=s=>COURSES.filter(c=>c.subject===s && !state.hiddenCourses[c.id]);
 const subjectRate=s=>{let a=subjectCourses(s);return a.length?a.filter(c=>lessonDone(c.id)).length/a.length:0};
+
+function nextUnfinishedCourse(subject){
+ return subjectCourses(subject)
+   .sort((a,b)=>(a.order||0)-(b.order||0))
+   .find(c=>!lessonDone(c.id))||null;
+}
+function isSequentiallyAvailable(course){
+ if(!course)return false;
+ return nextUnfinishedCourse(course.subject)?.id===course.id;
+}
+function isUnlocked(subject){
+ return subjectUnlock(subject);
+}
+function remainingWallSeconds(course){
+ // 相容舊函式名稱；正式容量與完成判定採原始課程片長。
+ return remainingOriginalSeconds(course);
+}
+
 const subjectPriority={"材料力學":24,"微積分":22,"工程數學":20,"靜力學":18,"結構學":16};
 const subjectDependencyReason={
  "材料力學":"後續靜力學與結構學的重要基礎",
@@ -501,14 +519,6 @@ function bindChecks(){
 function todayFormalDone(){
  return remainingTodayCapacitySeconds(new Date())<=0 || buildTodayTasks().length===0;
 }
-function scheduledDateForCourse(id){
- const keys=Object.keys(plan).sort();
- for(const key of keys){
-   if((plan[key]||[]).some(item=>item.id===id))return key;
- }
- return null;
-}
-
 function scheduledDateForCourse(id){
  const keys=Object.keys(plan).sort();
  for(const key of keys){
