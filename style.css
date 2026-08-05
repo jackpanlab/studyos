@@ -441,3 +441,12 @@ body.sheet-open{overflow:hidden}
 .task .duration{
   line-height:1.55;
 }
+
+
+/* StudyOS 5.5 — preview completeness */
+.preview-course h5{
+  line-height:1.35;
+}
+.preview-course p{
+  line-height:1.5;
+}
