@@ -1,4 +1,4 @@
-const CACHE = 'studyos-v5.6-original-duration';
+const CACHE = 'studyos-v6.0-stable';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './manifest.json'];
 
 self.addEventListener('install', event => {
