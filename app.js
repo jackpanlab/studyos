@@ -375,7 +375,7 @@ function taskCard(c,index,todayKey){
  const partial=c.sourceEnd<c.seconds-1;
  const segmentText=partial
    ?`今日安排 ${fmtSec(allocated)}｜整堂 ${c.duration}`
-   :`今日安排 ${fmtSec(allocated)}｜本段完成即看完整堂`;
+   :`今日安排 ${fmtSec(allocated)}｜完成今天內容＝整堂完成`;
 
  return `<article class="task" style="--accent:${c.color}" data-task-segment="${escapeHtml(key)}">
    <div class="task-top">
@@ -384,7 +384,7 @@ function taskCard(c,index,todayKey){
    </div>
    <h3>${escapeHtml(c.scheduleLabel||c.name)}</h3>
    <div class="duration">${segmentText}</div>
-   ${partial?`<div class="task-segment-note">四項全勾只會完成今天這一段，後續會從 ${secondsToClock(c.sourceEnd)} 接著排。</div>`:""}
+   ${partial?`<div class="task-segment-note">完成今日四項後，系統只記錄今天這一段；下次會從 ${secondsToClock(c.sourceEnd)} 繼續。</div>`:""}
    <div class="checks">
      ${["video:影片","notes:教材","examples:例題","exercises:習題"].map(x=>{
        const [k,n]=x.split(":");
@@ -396,8 +396,8 @@ function taskCard(c,index,todayKey){
      }).join("")}
    </div>
    <div class="task-actions">
-     <span>完成狀態：${partial?"今日分段":"本堂最後一段"}</span>
-     <button class="finish-all-button" type="button" data-finish-all="${escapeHtml(key)}">看完全部</button>
+     <span>完成狀態：${partial?"今日分段":"完成今日內容＝整堂完成"}</span>
+     <button class="finish-all-button" type="button" data-finish-all="${escapeHtml(key)}">整堂已看完</button>
    </div>
  </article>`;
 }
@@ -452,7 +452,7 @@ function commitScheduledSegment(key){
 function finishWholeCourse(key){
  const task=currentTodayTasks[key];
  if(!task)return;
- if(!confirm(`確定已經完整看完「${task.name}」？`))return;
+ if(!confirm(`確定「${task.name}」整堂已看完？\n\n這會直接完成整堂並更新後續排程。`))return;
 
  const todayKey=dateKey(new Date());
  const remainingWall=remainingWallSeconds(task);
@@ -486,7 +486,7 @@ function finishWholeCourse(key){
  save();
  plan=schedule();
  renderAll();
- toast(`已完整看完 ${task.name}`);
+ toast(`${task.name} 已標記為整堂已看完`);
 }
 
 function bindChecks(){
@@ -765,7 +765,7 @@ $("#restoreHidden").onclick=()=>{
 };
 
 $("#exportData").onclick=()=>{
- const payload={version:"5.2",exportedAt:new Date().toISOString(),state};
+ const payload={version:"5.3",exportedAt:new Date().toISOString(),state};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
  const a=document.createElement("a");
  a.href=URL.createObjectURL(blob);

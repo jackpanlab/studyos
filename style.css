@@ -425,3 +425,9 @@ body.sheet-open{overflow:hidden}
     width:100%;
   }
 }
+
+
+/* StudyOS 5.3 — wording refinement */
+.finish-all-button{
+  letter-spacing:.01em;
+}

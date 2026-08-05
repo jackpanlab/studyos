@@ -1,4 +1,4 @@
-const CACHE = 'studyos-v5.2-sequential-segments';
+const CACHE = 'studyos-v5.3-copy-refine';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './manifest.json'];
 
 self.addEventListener('install', event => {
