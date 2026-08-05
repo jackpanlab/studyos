@@ -1,4 +1,4 @@
-const CACHE = 'studyos-v5.0-preview-capacity';
+const CACHE = 'studyos-v5.1-pinned-sheet';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './manifest.json'];
 
 self.addEventListener('install', event => {

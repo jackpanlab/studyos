@@ -303,3 +303,83 @@ body{
   .preview-actions{width:100%}
   .preview-actions button{flex:1}
 }
+
+
+/* StudyOS 5.1 — 今日必看優先與可視範圍內編輯視窗 */
+body.sheet-open{overflow:hidden}
+
+.lesson-sheet{
+  padding:12px;
+}
+
+.sheet-panel{
+  top:50%;
+  bottom:auto;
+  width:min(660px,calc(100vw - 24px));
+  max-height:min(90dvh,880px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  transform:translate(-50%,calc(-50% + 40px)) scale(.98);
+  scrollbar-width:thin;
+}
+
+.lesson-sheet.open .sheet-panel{
+  transform:translate(-50%,-50%) scale(1);
+}
+
+.sheet-head{
+  position:sticky;
+  top:-16px;
+  z-index:5;
+  margin:-16px -24px 4px;
+  padding:16px 24px 8px;
+  background:linear-gradient(to bottom,rgba(250,250,252,.99) 76%,rgba(250,250,252,0));
+  backdrop-filter:blur(22px);
+}
+
+.sheet-close{
+  position:sticky;
+  top:0;
+  flex:0 0 auto;
+  display:grid;
+  place-items:center;
+  z-index:10;
+  font-size:26px;
+  line-height:1;
+}
+
+.task:has(.pill){
+  min-width:0;
+}
+
+.task .pill + span{
+  white-space:nowrap;
+}
+
+@media(max-width:650px){
+  .lesson-sheet{padding:6px}
+  .sheet-panel{
+    width:calc(100vw - 12px);
+    max-height:calc(100dvh - 12px);
+    border-radius:24px;
+    padding:14px 16px 20px;
+  }
+  .sheet-head{
+    top:-14px;
+    margin:-14px -16px 4px;
+    padding:14px 16px 8px;
+  }
+  .sheet-head h3{
+    font-size:27px;
+    margin-bottom:12px;
+  }
+  .sheet-two{
+    grid-template-columns:1fr;
+  }
+  .sheet-field{
+    margin:12px 0;
+  }
+  .sheet-actions{
+    padding-bottom:max(4px,env(safe-area-inset-bottom));
+  }
+}

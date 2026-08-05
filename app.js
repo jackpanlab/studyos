@@ -88,7 +88,7 @@ function renderAdvice(){
  $$("[data-apply-advice]").forEach(btn=>btn.onclick=()=>{
    const id=btn.dataset.applyAdvice;
    state.lessonMeta[id]={...(state.lessonMeta[id]||{}),pinned:true};
-   save();renderAdvice();renderSubjects();toast("已設為今日必看");
+   save();plan=schedule();renderAll();toast("已設為今日必看，已優先排入今天");
  });
 }
 
@@ -178,10 +178,63 @@ function schedule(){
  return result;
 }
 let plan=schedule();
+
+function buildTodayTasks(){
+ const todayKey=dateKey(new Date());
+ const cap=Math.max(0,dayCap(new Date()))*60;
+ if(cap<=0)return [];
+
+ let remaining=cap;
+ const result=[];
+ const usedIds=new Set();
+
+ // 今日必看優先，而且只放未完成、未隱藏的課程。
+ const pinned=COURSES
+   .filter(c=>!state.hiddenCourses[c.id] && !lessonDone(c.id) && state.lessonMeta[c.id]?.pinned)
+   .sort((a,b)=>(a.order||0)-(b.order||0));
+
+ for(const c of pinned){
+   if(remaining<60)break;
+   const needed=Math.max(60,courseRemainingSeconds(c));
+   const allocated=Math.min(needed,remaining);
+   result.push({
+     ...c,
+     allocated,
+     scheduledSeconds:allocated,
+     isPartial:allocated+1<needed,
+     isPinnedToday:true,
+     scheduleLabel:allocated+1<needed?`${c.name}（今日必看・分段）`:`${c.name}（今日必看）`
+   });
+   usedIds.add(c.id);
+   remaining-=allocated;
+ }
+
+ // 用原本正式排程填滿剩餘容量；避免重複同一堂。
+ for(const original of plan[todayKey]||[]){
+   if(remaining<60)break;
+   if(usedIds.has(original.id))continue;
+   const available=Math.max(60,original.allocated||original.seconds||0);
+   const allocated=Math.min(available,remaining);
+   result.push({
+     ...original,
+     allocated,
+     scheduledSeconds:allocated,
+     isPartial:allocated+1<(original.seconds||available),
+     scheduleLabel:allocated+1<(original.seconds||available)
+       ?`${original.name}（分段）`
+       :original.name
+   });
+   usedIds.add(original.id);
+   remaining-=allocated;
+ }
+
+ return result;
+}
+
 function renderToday(){
  const now=new Date();
  const today=dateKey(now);
- const tasks=plan[today]||[];
+ const tasks=buildTodayTasks();
  $("#todayLabel").textContent=now.toLocaleDateString("zh-TW",{year:"numeric",month:"long",day:"numeric",weekday:"long"});
  let exam=new Date(state.settings.examDate+"T00:00:00");
  $("#daysLeft").textContent=Math.max(0,Math.ceil((exam-now)/86400000));
@@ -428,8 +481,9 @@ function openLessonSheet(id){
  $("#toggleLessonStatus").textContent=lessonDone(id)?"改回未完成":"標記完成";
  $("#lessonSheet").classList.add("open");
  $("#lessonSheet").setAttribute("aria-hidden","false");
+ document.body.classList.add("sheet-open");
 }
-function closeLessonSheet(){$("#lessonSheet").classList.remove("open");$("#lessonSheet").setAttribute("aria-hidden","true");activeCourseId=null}
+function closeLessonSheet(){$("#lessonSheet").classList.remove("open");$("#lessonSheet").setAttribute("aria-hidden","true");document.body.classList.remove("sheet-open");activeCourseId=null}
 function completeAllParts(id,done){state.progress[id]={...(state.progress[id]||{}),video:done,notes:done,examples:done,exercises:done,updated:new Date().toISOString()};save();plan=schedule();renderAll()}
 $$('[data-close-sheet]').forEach(el=>el.onclick=closeLessonSheet);document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLessonSheet()});
 $("#saveLessonEdit").onclick=()=>{
@@ -482,7 +536,7 @@ $("#restoreHidden").onclick=()=>{
 };
 
 $("#exportData").onclick=()=>{
- const payload={version:"5.0",exportedAt:new Date().toISOString(),state};
+ const payload={version:"5.1",exportedAt:new Date().toISOString(),state};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
  const a=document.createElement("a");
  a.href=URL.createObjectURL(blob);
