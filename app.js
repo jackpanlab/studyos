@@ -42,6 +42,18 @@ const lessonDone=id=>{
 function remainingSourceSeconds(c){
  return Math.max(0,c.seconds-completedSourceSeconds(c));
 }
+
+function wallToSourceSeconds(wallSeconds,c){
+ return Math.max(0,wallSeconds)*playbackRateFor(c);
+}
+function sourceToWallSeconds(sourceSeconds,c){
+ return Math.max(0,sourceSeconds)/playbackRateFor(c);
+}
+function isFinalScheduledSegment(task){
+ const sourceEnd=Number(task.sourceEnd)||0;
+ const total=Number(task.seconds)||0;
+ return sourceEnd>=total-1;
+}
 function playbackRateFor(c){
  return Math.max(1,+state.lessonMeta[c.id]?.playbackRate||1.5);
 }
@@ -372,10 +384,10 @@ function taskCard(c,index,todayKey){
  currentTodayTasks[key]=c;
  const checks=state.segmentChecks[key]||{};
  const allocated=c.allocated||0;
- const partial=c.sourceEnd<c.seconds-1;
- const segmentText=partial
-   ?`今日安排 ${fmtSec(allocated)}｜整堂 ${c.duration}`
-   :`今日安排 ${fmtSec(allocated)}｜完成今天內容＝整堂完成`;
+ const finalSegment=isFinalScheduledSegment(c);
+ const segmentText=finalSegment
+   ?`今日安排 ${fmtSec(allocated)}｜完成今日內容後，本堂課即完成`
+   :`今日安排 ${fmtSec(allocated)}｜整堂 ${c.duration}`;
 
  return `<article class="task" style="--accent:${c.color}" data-task-segment="${escapeHtml(key)}">
    <div class="task-top">
@@ -384,7 +396,7 @@ function taskCard(c,index,todayKey){
    </div>
    <h3>${escapeHtml(c.scheduleLabel||c.name)}</h3>
    <div class="duration">${segmentText}</div>
-   ${partial?`<div class="task-segment-note">完成今日四項後，系統只記錄今天這一段；下次會從 ${secondsToClock(c.sourceEnd)} 繼續。</div>`:""}
+   ${!finalSegment?`<div class="task-segment-note">完成今日四項後，只記錄今天安排的這一段；下次會從影片 ${secondsToClock(c.sourceEnd)} 繼續。</div>`:`<div class="task-segment-note final-segment-note">完成今日四項後，本堂課將標記完成。</div>`}
    <div class="checks">
      ${["video:影片","notes:教材","examples:例題","exercises:習題"].map(x=>{
        const [k,n]=x.split(":");
@@ -396,7 +408,7 @@ function taskCard(c,index,todayKey){
      }).join("")}
    </div>
    <div class="task-actions">
-     <span>完成狀態：${partial?"今日分段":"完成今日內容＝整堂完成"}</span>
+     <span>完成狀態：${finalSegment?"本堂最後一段":"今日分段"}</span>
      <button class="finish-all-button" type="button" data-finish-all="${escapeHtml(key)}">整堂已看完</button>
    </div>
  </article>`;
@@ -431,8 +443,13 @@ function commitScheduledSegment(key){
  ];
  delete state.segmentChecks[key];
 
- if(state.studyProgress[task.id]>=task.seconds-1){
+ const reachedEnd=(Number(task.sourceEnd)||0)>=task.seconds-1;
+ if(reachedEnd){
    state.studyProgress[task.id]=task.seconds;
+   state.lessonMeta[task.id]={
+     ...(state.lessonMeta[task.id]||{}),
+     watchPosition:task.duration
+   };
    state.progress[task.id]={
      ...(state.progress[task.id]||{}),
      video:true,notes:true,examples:true,exercises:true,
@@ -443,7 +460,7 @@ function commitScheduledSegment(key){
  save();
  plan=schedule();
  renderAll();
- toast(state.studyProgress[task.id]>=task.seconds-1
+ toast(reachedEnd
    ?`已看完 ${task.name}`
    :`已完成 ${task.name} 的今日 ${fmtSec(task.allocated)}，下次會從 ${secondsToClock(task.sourceEnd)} 接著排`
  );
@@ -765,7 +782,7 @@ $("#restoreHidden").onclick=()=>{
 };
 
 $("#exportData").onclick=()=>{
- const payload={version:"5.3",exportedAt:new Date().toISOString(),state};
+ const payload={version:"5.4",exportedAt:new Date().toISOString(),state};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
  const a=document.createElement("a");
  a.href=URL.createObjectURL(blob);

@@ -431,3 +431,13 @@ body.sheet-open{overflow:hidden}
 .finish-all-button{
   letter-spacing:.01em;
 }
+
+
+/* StudyOS 5.4 — final-segment clarity */
+.final-segment-note{
+  background:rgba(52,199,89,.10);
+  color:#176b2c;
+}
+.task .duration{
+  line-height:1.55;
+}
